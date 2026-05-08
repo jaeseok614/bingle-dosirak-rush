@@ -63,7 +63,7 @@
             <strong id="orderNumber">#1</strong>
           </div>
           <div id="orderRule" class="order-rule" hidden></div>
-          <p class="order-hint">재료가 같은 이름 칸에 들어가면 바로 완료됩니다.</p>
+          <p class="order-hint">같은 음식끼리 합치고 주문 음식을 같은 재료 칸에 잠깐 머물게 하세요.</p>
           <div id="orderList" class="order-list"></div>
           <section class="mission-panel" aria-label="미션">
             <div class="mission-title">
@@ -84,10 +84,10 @@
         </aside>
 
         <section class="stage-panel">
-          <canvas id="gameCanvas" width="900" height="680" aria-label="회전 도시락 게임 화면"></canvas>
+          <canvas id="gameCanvas" width="900" height="680" aria-label="합체 도시락 게임 화면"></canvas>
           <div class="touch-zones" aria-hidden="true">
-            <button class="touch-zone" type="button" data-dir="left" tabindex="-1" aria-label="왼쪽 터치 회전"></button>
-            <button class="touch-zone" type="button" data-dir="right" tabindex="-1" aria-label="오른쪽 터치 회전"></button>
+            <button class="touch-zone" type="button" data-dir="left" tabindex="-1" aria-label="왼쪽 젓가락 튕기기"></button>
+            <button class="touch-zone" type="button" data-dir="right" tabindex="-1" aria-label="오른쪽 젓가락 튕기기"></button>
           </div>
           <div id="characterHud" class="character-hud" aria-live="polite">
             <img id="activeCharacterImage" src="assets/characters/cook.png" alt="" />
@@ -99,22 +99,22 @@
           <div id="guideOverlay" class="guide-modal">
             <div class="guide-box" role="dialog" aria-modal="true" aria-labelledby="guideTitle">
               <span class="result-kicker">가이드</span>
-              <h2 id="guideTitle">돌려서 같은 칸에 넣기</h2>
+              <h2 id="guideTitle">합쳐서 주문 칸에 배달하기</h2>
               <div class="guide-steps">
                 <div class="guide-step">
-                  <span class="guide-icon" aria-hidden="true">↺</span>
-                  <strong>도시락을 회전</strong>
-                  <p>키보드 <kbd>A</kbd>/<kbd>D</kbd>, <kbd>←</kbd>/<kbd>→</kbd> 또는 오른쪽 회전 버튼을 누릅니다.</p>
+                  <span class="guide-icon" aria-hidden="true">L</span>
+                  <strong>젓가락으로 튕기기</strong>
+                  <p><kbd>A</kbd>/<kbd>D</kbd>, <kbd>←</kbd>/<kbd>→</kbd> 또는 좌우 버튼으로 아래쪽 재료를 튕깁니다.</p>
                 </div>
                 <div class="guide-step">
                   <span class="guide-icon guide-dot" aria-hidden="true"></span>
-                  <strong>같은 이름 칸에 넣기</strong>
-                  <p>왼쪽 주문의 재료를 도시락 안의 같은 이름 칸에 굴려 넣습니다.</p>
+                  <strong>같은 음식끼리 합치기</strong>
+                  <p>같은 재료와 같은 단계가 부딪히면 더 큰 음식으로 합쳐집니다.</p>
                 </div>
                 <div class="guide-step">
                   <span class="guide-icon guide-ring" aria-hidden="true"></span>
-                  <strong>들어가면 바로 성공</strong>
-                  <p>맞는 칸을 지나간 재료는 즉시 사라지고 점수와 콤보가 올라갑니다.</p>
+                  <strong>주문 칸에 배달</strong>
+                  <p>주문 음식이 같은 재료 칸에 잠깐 머물면 배달되고 점수와 콤보가 올라갑니다.</p>
                 </div>
                 <div class="guide-step">
                   <span class="guide-icon guide-item" aria-hidden="true">★</span>
@@ -124,7 +124,7 @@
                 <div class="guide-step">
                   <span class="guide-icon guide-fever" aria-hidden="true">F</span>
                   <strong>피버를 노리기</strong>
-                  <p>콤보 x8 또는 도시락 3개 연속 완성 시 8초 동안 점수가 2배입니다.</p>
+                  <p>콤보 x8 또는 주문 3개 연속 완성 시 8초 동안 점수가 2배입니다.</p>
                 </div>
                 <div class="guide-step">
                   <span class="guide-icon guide-skill" aria-hidden="true">!</span>
@@ -137,7 +137,7 @@
                   <p>플레이 보상 코인으로 캐릭터와 소모 아이템을 사고 성능을 바꿀 수 있습니다.</p>
                 </div>
               </div>
-              <p class="guide-tip">여러 재료가 같이 굴러가도 괜찮습니다. 맞는 칸을 통과한 재료부터 하나씩 빠집니다.</p>
+              <p class="guide-tip">스치기만 하면 배달되지 않습니다. 필요한 음식을 합친 뒤 같은 재료 칸에 안정적으로 머물게 하세요.</p>
               <button id="startButton" class="primary-button" type="button">게임 시작</button>
             </div>
           </div>
@@ -263,8 +263,8 @@
         </section>
 
         <aside class="action-panel" aria-label="조작">
-          <button class="icon-button control-button" type="button" data-dir="left" aria-label="왼쪽으로 회전">↺</button>
-          <button class="icon-button control-button" type="button" data-dir="right" aria-label="오른쪽으로 회전">↻</button>
+          <button class="icon-button control-button" type="button" data-dir="left" aria-label="왼쪽 젓가락 튕기기">↖</button>
+          <button class="icon-button control-button" type="button" data-dir="right" aria-label="오른쪽 젓가락 튕기기">↗</button>
           <button id="skillButton" class="secondary-button skill-button" type="button">톡 치기</button>
           <button id="modeButton" class="secondary-button mode-button" type="button">오늘 챌린지</button>
           <button id="characterButton" class="secondary-button character-button" type="button">캐릭터</button>

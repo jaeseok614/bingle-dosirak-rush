@@ -90,6 +90,14 @@
   const FEVER_COMBO = 8;
   const FEVER_ORDER_STREAK = 3;
   const SKILL_COOLDOWN = 8;
+  const DELIVERY_HOLD_SECONDS = 0.45;
+  const WRONG_HOLD_SECONDS = 1.35;
+  const FORBIDDEN_HOLD_SECONDS = 0.9;
+  const MAX_PIECES = 16;
+  const BASE_SPAWN_SECONDS = 1.85;
+  const FEVER_SPAWN_SECONDS = 1.15;
+  const STARTER_PIECES = 8;
+  const MAX_FOOD_LEVEL = 3;
   const TAU = Math.PI * 2;
   const FIT_TEXT_SELECTOR = [
     ".stat-cell strong",
@@ -150,10 +158,10 @@
       id: "sprinter",
       name: "스피드 셰프",
       short: "속",
-      cost: 90,
+      cost: 70,
       color: "#e85d4f",
       image: "assets/characters/sprinter.png",
-      description: "회전 +15%, 톡 치기 쿨타임 -15%",
+      description: "플리퍼 힘 +15%, 톡 치기 쿨타임 -15%",
       stats: {
         rotate: 1.15,
         score: 1,
@@ -168,7 +176,7 @@
       id: "combo",
       name: "콤보 장인",
       short: "콤",
-      cost: 130,
+      cost: 105,
       color: "#6d4c96",
       image: "assets/characters/combo.png",
       description: "콤보 점수 +18%, 기본 점수 +4%",
@@ -186,7 +194,7 @@
       id: "magnet",
       name: "자석 주방장",
       short: "자",
-      cost: 165,
+      cost: 125,
       color: "#2c9aa0",
       image: "assets/characters/magnet.png",
       description: "아이템 등장 빨라짐, 자석 지속 +35%",
@@ -204,7 +212,7 @@
       id: "owner",
       name: "느긋한 사장님",
       short: "장",
-      cost: 190,
+      cost: 145,
       color: "#9b7423",
       image: "assets/characters/owner.png",
       description: "시작 시간 +6초, 전체 점수 +6%",
@@ -227,7 +235,7 @@
       id: "timeTicket",
       name: "시간 쿠폰",
       short: "+5초",
-      cost: 40,
+      cost: 25,
       color: "#2c9aa0",
       description: "진행 중 남은 시간을 5초 늘립니다.",
     },
@@ -235,23 +243,23 @@
       id: "comboSpice",
       name: "콤보 향신료",
       short: "콤보",
-      cost: 45,
+      cost: 30,
       color: "#e85d4f",
-      description: "진행 중 콤보를 2 올립니다.",
+      description: "진행 중 합체 콤보를 2 올립니다.",
     },
     magnetKit: {
       id: "magnetKit",
       name: "자석 키트",
       short: "자석",
-      cost: 50,
+      cost: 35,
       color: "#f1c453",
-      description: "진행 중 자석 효과를 8초 켭니다.",
+      description: "진행 중 필요한 음식과 합체 후보를 8초 끌어당깁니다.",
     },
     feverStamp: {
       id: "feverStamp",
       name: "피버 스탬프",
       short: "피버",
-      cost: 70,
+      cost: 45,
       color: "#6d4c96",
       description: "진행 중 피버를 바로 발동합니다.",
     },
@@ -347,7 +355,7 @@
     {
       id: "orderDifficulty",
       label: "주문 난이도",
-      detail: "주문 재료 개수 증가 속도에 영향을 줍니다.",
+      detail: "주문 음식 단계와 개수 증가 속도에 영향을 줍니다.",
       min: 0.75,
       max: 1.35,
       step: 0.05,
@@ -437,6 +445,14 @@
   };
 
   const FOOD_KEYS = Object.keys(FOODS);
+  const FOOD_EVOLUTIONS = {
+    rice: ["밥알", "주먹밥", "김밥", "특제 도시락"],
+    egg: ["계란", "계란말이", "오믈렛", "계란 도시락"],
+    kimchi: ["김치", "볶음김치", "김치볶음밥", "매운 도시락"],
+    nori: ["김", "김말이", "김 주먹밥", "바삭 도시락"],
+    shrimp: ["새우", "새우튀김", "새우볶음밥", "해물 도시락"],
+  };
+  const LEVEL_SCORE = [0, 180, 420, 920];
   const SLOTS = FOOD_KEYS.map((type, index) => ({
     type,
     angle: -Math.PI / 2 + index * (TAU / FOOD_KEYS.length),
@@ -541,6 +557,7 @@
     trayBodies: [],
     baffleBodies: [],
     pieces: [],
+    pendingMerges: new Set(),
     powerItems: [],
     particles: [],
     score: 0,
@@ -570,6 +587,7 @@
     itemRng: Math.random,
     magnetTimer: 0,
     itemSpawnTimer: 0,
+    ingredientSpawnTimer: 0,
     itemMessage: "대기",
     itemMessageTimer: 0,
     feverTimer: 0,
@@ -585,6 +603,10 @@
     lastShareText: "",
     trayAngle: 0,
     trayVelocity: 0,
+    flipperTimers: {
+      left: 0,
+      right: 0,
+    },
     nextOrderDelay: 0,
     lastFrame: 0,
     uiTimer: 0,
@@ -640,6 +662,7 @@
         if (b) b.bump = 0.14;
         if (a && itemB) collectPowerItem(itemB);
         if (b && itemA) collectPowerItem(itemA);
+        if (a && b) queueMerge(a, b);
       }
     });
 
@@ -670,11 +693,17 @@
       }
 
       if (event.key === "ArrowLeft" || event.key.toLowerCase() === "a") {
-        controls.left = true;
+        setDirectionActive("left", true);
+        if (!event.repeat) {
+          triggerFlipper("left");
+        }
         event.preventDefault();
       }
       if (event.key === "ArrowRight" || event.key.toLowerCase() === "d") {
-        controls.right = true;
+        setDirectionActive("right", true);
+        if (!event.repeat) {
+          triggerFlipper("right");
+        }
         event.preventDefault();
       }
       if (event.key.toLowerCase() === "r") {
@@ -691,11 +720,11 @@
 
     window.addEventListener("keyup", (event) => {
       if (event.key === "ArrowLeft" || event.key.toLowerCase() === "a") {
-        controls.left = false;
+        setDirectionActive("left", false);
         event.preventDefault();
       }
       if (event.key === "ArrowRight" || event.key.toLowerCase() === "d") {
-        controls.right = false;
+        setDirectionActive("right", false);
         event.preventDefault();
       }
     });
@@ -703,14 +732,14 @@
     for (const button of ui.controls) {
       const direction = button.dataset.dir;
       const setActive = (active) => {
-        controls[direction] = active;
-        button.classList.toggle("is-active", active);
+        setDirectionActive(direction, active);
       };
       button.addEventListener("pointerdown", (event) => {
         event.preventDefault();
         unlockAudio();
         button.setPointerCapture(event.pointerId);
         setActive(true);
+        triggerFlipper(direction);
       });
       button.addEventListener("pointerup", () => setActive(false));
       button.addEventListener("pointercancel", () => setActive(false));
@@ -866,6 +895,7 @@
     game.wasRunningBeforeShop = false;
     game.magnetTimer = 0;
     game.itemSpawnTimer = getInitialItemDelay();
+    game.ingredientSpawnTimer = 0.35;
     game.itemMessage = "대기";
     game.itemMessageTimer = 0;
     game.feverTimer = 0;
@@ -881,6 +911,8 @@
     game.lastShareText = "";
     game.trayAngle = 0;
     game.trayVelocity = 0;
+    game.flipperTimers.left = 0;
+    game.flipperTimers.right = 0;
     game.nextOrderDelay = 0;
     game.lastFrame = 0;
     ui.modal.hidden = true;
@@ -932,10 +964,17 @@
   }
 
   function resetControls() {
-    controls.left = false;
-    controls.right = false;
+    setDirectionActive("left", false);
+    setDirectionActive("right", false);
+  }
+
+  function setDirectionActive(direction, active) {
+    if (!direction) return;
+    controls[direction] = active;
     for (const button of ui.controls) {
-      button.classList.remove("is-active");
+      if (button.dataset.dir === direction) {
+        button.classList.toggle("is-active", active);
+      }
     }
   }
 
@@ -944,7 +983,6 @@
 
     unlockAudio();
     game.skillCooldown = SKILL_COOLDOWN * getCharacterStats().skillCooldown;
-    game.trayVelocity += game.trayVelocity >= 0 ? 1.15 : -1.15;
     game.itemMessage = "톡!";
     game.itemMessageTimer = 1.2;
 
@@ -967,6 +1005,45 @@
     updateUi(false);
   }
 
+  function triggerFlipper(direction) {
+    if (!game.running || !["left", "right"].includes(direction)) return;
+
+    unlockAudio();
+    const side = direction === "left" ? -1 : 1;
+    const stats = getCharacterStats();
+    const pivot = {
+      x: CENTER.x + side * 108,
+      y: CENTER.y + 150,
+    };
+    let hitCount = 0;
+
+    for (const piece of game.pieces) {
+      const body = piece.body;
+      const dx = body.position.x - pivot.x;
+      const dy = body.position.y - pivot.y;
+      const distance = Math.hypot(dx, dy);
+      const inSide = side < 0 ? body.position.x < CENTER.x + 70 : body.position.x > CENTER.x - 70;
+      if (!inSide || distance > 178 || body.position.y < CENTER.y - 78) continue;
+
+      const lift = 4.55 * stats.rotate;
+      const inward = -side * (3.15 + piece.level * 0.25) * stats.rotate;
+      Body.setVelocity(body, {
+        x: body.velocity.x * 0.45 + inward,
+        y: body.velocity.y * 0.35 - lift,
+      });
+      Body.setAngularVelocity(body, randomRange(-0.28, 0.28));
+      piece.bump = 0.18;
+      hitCount += 1;
+    }
+
+    game.flipperTimers[direction] = 0.2;
+    game.trayVelocity += -side * 0.16;
+    game.itemMessage = direction === "left" ? "왼쪽 젓가락!" : "오른쪽 젓가락!";
+    game.itemMessageTimer = 0.8;
+    playSound(hitCount ? "item" : "success");
+    vibrate(hitCount ? 12 : 6);
+  }
+
   function clearIngredients() {
     if (game.pieces.length) {
       World.remove(
@@ -975,6 +1052,7 @@
       );
     }
     game.pieces = [];
+    game.pendingMerges.clear();
   }
 
   function clearPowerItems() {
@@ -992,10 +1070,8 @@
   }
 
   function createOrder() {
-    clearIngredients();
-
-    const baseCount = Math.min(2 + Math.floor(game.completed / 3), 5);
-    const count = clamp(Math.round(baseCount * meta.balance.orderDifficulty), 2, 5);
+    const baseCount = game.completed < 5 ? 1 : 1 + Math.floor(game.completed / 6);
+    const count = clamp(Math.round(baseCount * meta.balance.orderDifficulty), 1, 3);
     const order = {};
     game.progress = {};
     game.targetTotal = count;
@@ -1009,20 +1085,22 @@
 
     for (let i = 0; i < count; i += 1) {
       const key = foodPool[Math.floor(game.orderRng() * foodPool.length)];
-      order[key] = (order[key] || 0) + 1;
-      game.progress[key] = 0;
+      const level = pickOrderLevel();
+      const id = orderKey(key, level);
+      order[id] = (order[id] || 0) + 1;
+      game.progress[id] = 0;
     }
 
-    if (game.orderRule.id === "spicy" && !order.kimchi) {
-      ensureOrderHas(order, "kimchi");
+    if (game.orderRule.id === "spicy" && !orderHasType(order, "kimchi")) {
+      ensureOrderHas(order, "kimchi", pickOrderLevel());
     }
 
     if (game.orderRule.id === "heavy") {
-      ensureOrderHas(order, "rice");
+      ensureOrderHas(order, "rice", pickOrderLevel());
     }
 
     if (game.orderRule.id === "slippery") {
-      ensureOrderHas(order, "nori");
+      ensureOrderHas(order, "nori", pickOrderLevel());
     }
 
     if (game.orderRule.id === "forbidden") {
@@ -1032,21 +1110,26 @@
     game.order = order;
     game.orderIndex = game.completed + 1;
 
-    const spawnList = [];
-    for (const [type, amount] of Object.entries(order)) {
-      for (let i = 0; i < amount; i += 1) {
-        spawnList.push(type);
-      }
+    if (game.pieces.length === 0) {
+      spawnStarterIngredients();
     }
-    shuffle(spawnList, game.orderRng);
-    spawnList.forEach((type, index) => spawnIngredient(type, index, spawnList.length));
     updateUi(true);
   }
 
-  function ensureOrderHas(order, type) {
-    if (order[type]) return;
+  function pickOrderLevel() {
+    const maxLevel = clamp(1 + Math.floor((game.completed * meta.balance.orderDifficulty) / 3), 1, MAX_FOOD_LEVEL);
+    const minLevel = maxLevel >= MAX_FOOD_LEVEL ? 2 : 1;
+    return Math.floor(randomRange(minLevel, maxLevel + 1, game.orderRng));
+  }
 
-    const replaceTarget = Object.keys(order).find((key) => key !== type) || Object.keys(order)[0];
+  function orderHasType(order, type) {
+    return Object.keys(order).some((id) => parseOrderKey(id).type === type);
+  }
+
+  function ensureOrderHas(order, type, level) {
+    if (orderHasType(order, type)) return;
+
+    const replaceTarget = Object.keys(order).find((key) => parseOrderKey(key).type !== type) || Object.keys(order)[0];
     if (!replaceTarget) return;
 
     order[replaceTarget] -= 1;
@@ -1055,12 +1138,14 @@
       delete game.progress[replaceTarget];
     }
 
-    order[type] = (order[type] || 0) + 1;
-    game.progress[type] = game.progress[type] || 0;
+    const id = orderKey(type, level);
+    order[id] = (order[id] || 0) + 1;
+    game.progress[id] = game.progress[id] || 0;
   }
 
   function pickForbiddenType(order) {
-    const candidates = FOOD_KEYS.filter((type) => !order[type]);
+    const orderedTypes = new Set(Object.keys(order).map((id) => parseOrderKey(id).type));
+    const candidates = FOOD_KEYS.filter((type) => !orderedTypes.has(type));
     const pool = candidates.length ? candidates : FOOD_KEYS;
     return pool[Math.floor(game.orderRng() * pool.length)];
   }
@@ -1071,13 +1156,86 @@
     return SPECIAL_RULES[Math.floor(game.orderRng() * SPECIAL_RULES.length)];
   }
 
-  function spawnIngredient(type, index, total) {
-    const food = FOODS[type];
+  function orderKey(type, level) {
+    return `${type}:${clamp(Math.round(level), 0, MAX_FOOD_LEVEL)}`;
+  }
+
+  function parseOrderKey(id) {
+    const [type, rawLevel] = String(id).split(":");
+    return {
+      type: FOODS[type] ? type : FOOD_KEYS[0],
+      level: clamp(Math.round(Number(rawLevel) || 0), 0, MAX_FOOD_LEVEL),
+    };
+  }
+
+  function getFoodName(type, level = 0) {
+    return FOOD_EVOLUTIONS[type]?.[clamp(Math.round(level), 0, MAX_FOOD_LEVEL)] || FOODS[type]?.name || "";
+  }
+
+  function getFoodLevelConfig(type, level = 0) {
+    const base = FOODS[type] || FOODS.rice;
+    const safeLevel = clamp(Math.round(level), 0, MAX_FOOD_LEVEL);
+    return {
+      ...base,
+      name: getFoodName(type, safeLevel),
+      radius: base.radius + safeLevel * 7,
+      density: base.density * (0.9 + safeLevel * 0.08),
+      level: safeLevel,
+    };
+  }
+
+  function pickSpawnType() {
+    const pool = [];
+    for (const key of FOOD_KEYS) {
+      pool.push(key, key);
+    }
+
+    for (const id of Object.keys(game.order || {})) {
+      const { type, level } = parseOrderKey(id);
+      const weight = 5 + level * 2;
+      for (let i = 0; i < weight; i += 1) {
+        pool.push(type);
+      }
+    }
+
+    if (game.orderRule.foods) {
+      for (const type of game.orderRule.foods) {
+        pool.push(type, type);
+      }
+    }
+
+    return pool[Math.floor(game.orderRng() * pool.length)] || FOOD_KEYS[0];
+  }
+
+  function spawnStarterIngredients() {
+    const starters = [];
+
+    for (const id of Object.keys(game.order || {})) {
+      const { type } = parseOrderKey(id);
+      starters.push(type, type);
+    }
+
+    while (starters.length < STARTER_PIECES) {
+      starters.push(pickSpawnType());
+    }
+
+    for (let i = starters.length - 1; i > 0; i -= 1) {
+      const j = Math.floor(game.orderRng() * (i + 1));
+      [starters[i], starters[j]] = [starters[j], starters[i]];
+    }
+
+    for (let i = 0; i < STARTER_PIECES; i += 1) {
+      spawnIngredient(starters[i], i, STARTER_PIECES, 0);
+    }
+  }
+
+  function spawnIngredient(type, index = 0, total = 1, level = 0, position = null, velocity = null) {
+    const food = getFoodLevelConfig(type, level);
     const spread = Math.min(120, 34 * total);
     const offset = index - (total - 1) / 2;
     const body = Bodies.circle(
-      CENTER.x + offset * 20 + randomRange(-12, 12, game.orderRng),
-      CENTER.y - 30 + randomRange(-spread * 0.2, spread * 0.18, game.orderRng),
+      position?.x ?? CENTER.x + offset * 20 + randomRange(-12, 12, game.orderRng),
+      position?.y ?? CENTER.y - 80 + randomRange(-spread * 0.2, spread * 0.18, game.orderRng),
       food.radius,
       {
         friction: food.friction,
@@ -1091,21 +1249,115 @@
     const piece = {
       id: cryptoId(),
       type,
+      level,
       body,
       hold: 0,
       wrongHold: 0,
       forbiddenHold: 0,
       bump: 0,
       scored: false,
+      merging: false,
       bornAt: performance.now(),
     };
     body.plugin.ingredient = piece;
-    Body.setVelocity(body, {
-      x: randomRange(-2.5, 2.5, game.orderRng),
-      y: randomRange(-1.5, 1.5, game.orderRng),
-    });
+    Body.setVelocity(
+      body,
+      velocity || {
+        x: randomRange(-2.5, 2.5, game.orderRng),
+        y: randomRange(-1.5, 1.5, game.orderRng),
+      },
+    );
     game.pieces.push(piece);
     World.add(game.world, body);
+    return piece;
+  }
+
+  function queueMerge(a, b) {
+    if (!canMerge(a, b)) return;
+
+    const key = [a.id, b.id].sort().join("|");
+    if (game.pendingMerges.has(key)) return;
+
+    a.merging = true;
+    b.merging = true;
+    game.pendingMerges.add(key);
+  }
+
+  function canMerge(a, b) {
+    return (
+      a &&
+      b &&
+      !a.scored &&
+      !b.scored &&
+      !a.merging &&
+      !b.merging &&
+      a.type === b.type &&
+      a.level === b.level &&
+      a.level < MAX_FOOD_LEVEL
+    );
+  }
+
+  function processMerges() {
+    if (!game.pendingMerges.size) return;
+
+    for (const key of [...game.pendingMerges]) {
+      game.pendingMerges.delete(key);
+      const [aId, bId] = key.split("|");
+      const a = game.pieces.find((piece) => piece.id === aId);
+      const b = game.pieces.find((piece) => piece.id === bId);
+      if (!a || !b) {
+        if (a) a.merging = false;
+        if (b) b.merging = false;
+        continue;
+      }
+
+      const distance = Math.hypot(a.body.position.x - b.body.position.x, a.body.position.y - b.body.position.y);
+      if (distance > a.body.circleRadius + b.body.circleRadius + 18) {
+        a.merging = false;
+        b.merging = false;
+        continue;
+      }
+
+      mergePieces(a, b);
+    }
+  }
+
+  function mergePieces(a, b) {
+    const type = a.type;
+    const nextLevel = Math.min(MAX_FOOD_LEVEL, a.level + 1);
+    const position = {
+      x: (a.body.position.x + b.body.position.x) / 2,
+      y: (a.body.position.y + b.body.position.y) / 2,
+    };
+    const velocity = {
+      x: (a.body.velocity.x + b.body.velocity.x) / 2,
+      y: (a.body.velocity.y + b.body.velocity.y) / 2 - 0.65,
+    };
+
+    World.remove(game.world, [a.body, b.body]);
+    game.pieces = game.pieces.filter((piece) => piece !== a && piece !== b);
+
+    const merged = spawnIngredient(type, 0, 1, nextLevel, position, velocity);
+    merged.bump = 0.26;
+    merged.hold = 0;
+
+    const score = LEVEL_SCORE[nextLevel] + nextLevel * 55;
+    addScore(score, "base");
+    addScore(Math.max(0, game.combo - 1) * 55, "combo");
+    if (game.orderRule.id === "spicy" && type === "kimchi") {
+      addScore(score, "order");
+    }
+    game.combo += 1;
+    game.maxCombo = Math.max(game.maxCombo, game.combo);
+    game.runStats.mergeCount += 1;
+    game.itemMessage = `${getFoodName(type, nextLevel)} 합체!`;
+    game.itemMessageTimer = 1.4;
+    burst(position.x, position.y, FOODS[type].color, 22 + nextLevel * 4);
+    setCharacterReaction("합체!", "happy", 1.15);
+    playSound(game.combo >= 5 && game.combo % 5 === 0 ? "combo" : "success");
+    vibrate([8, 14, 8]);
+    checkFeverTriggers();
+    updateUi(true);
   }
 
   function spawnPowerItem() {
@@ -1213,15 +1465,21 @@
     if (game.magnetTimer <= 0) return;
 
     for (const piece of game.pieces) {
-      if (piece.scored || !needsMore(piece.type)) continue;
+      if (piece.scored || piece.merging) continue;
 
-      const slot = SLOTS.find((candidate) => candidate.type === piece.type);
-      if (!slot) continue;
+      let target = getMergeCandidateTarget(piece);
+      if (!target && needsMore(piece.type, piece.level)) {
+        const slot = SLOTS.find((candidate) => candidate.type === piece.type);
+        if (slot) {
+          const targetLocal = polar(slot.angle, 176);
+          const point = rotatePoint(targetLocal.x, targetLocal.y, game.trayAngle);
+          target = { x: CENTER.x + point.x, y: CENTER.y + point.y };
+        }
+      }
+      if (!target) continue;
 
-      const targetLocal = polar(slot.angle, 176);
-      const target = rotatePoint(targetLocal.x, targetLocal.y, game.trayAngle);
-      const dx = CENTER.x + target.x - piece.body.position.x;
-      const dy = CENTER.y + target.y - piece.body.position.y;
+      const dx = target.x - piece.body.position.x;
+      const dy = target.y - piece.body.position.y;
       const distance = Math.max(80, Math.hypot(dx, dy));
       const strength = 0.000055 * piece.body.mass;
 
@@ -1230,6 +1488,101 @@
         y: (dy / distance) * strength,
       });
     }
+  }
+
+  function applyDeliveryAssist() {
+    if (game.nextOrderDelay > 0) return;
+
+    for (const piece of game.pieces) {
+      if (piece.scored || piece.merging || !needsMore(piece.type, piece.level)) continue;
+
+      const local = toTrayLocal(piece.body.position.x, piece.body.position.y);
+      const distance = Math.hypot(local.x, local.y);
+      if (distance < TARGET_INNER || distance > TARGET_OUTER + 52) continue;
+
+      const slot = SLOTS.find((candidate) => candidate.type === piece.type);
+      if (!slot) continue;
+
+      const angle = Math.atan2(local.y, local.x);
+      if (Math.abs(angleDelta(angle, slot.angle)) > TARGET_WIDTH * 0.58) continue;
+
+      const targetLocal = polar(slot.angle, 164);
+      const target = rotatePoint(targetLocal.x, targetLocal.y, game.trayAngle);
+      const dx = CENTER.x + target.x - piece.body.position.x;
+      const dy = CENTER.y + target.y - piece.body.position.y;
+      const pullDistance = Math.max(72, Math.hypot(dx, dy));
+      const strength = 0.000024 * piece.body.mass;
+
+      Body.applyForce(piece.body, piece.body.position, {
+        x: (dx / pullDistance) * strength,
+        y: (dy / pullDistance) * strength,
+      });
+    }
+  }
+
+  function getMergeCandidateTarget(piece) {
+    if (piece.level >= MAX_FOOD_LEVEL) return null;
+
+    let nearest = null;
+    let nearestDistance = Infinity;
+    for (const candidate of game.pieces) {
+      if (
+        candidate === piece ||
+        candidate.merging ||
+        candidate.type !== piece.type ||
+        candidate.level !== piece.level
+      ) {
+        continue;
+      }
+
+      const distance = Math.hypot(
+        candidate.body.position.x - piece.body.position.x,
+        candidate.body.position.y - piece.body.position.y,
+      );
+      if (distance < nearestDistance) {
+        nearestDistance = distance;
+        nearest = candidate;
+      }
+    }
+
+    return nearest && nearestDistance < 210 ? nearest.body.position : null;
+  }
+
+  function updateIngredientSpawns(dt) {
+    if (!game.running || game.nextOrderDelay > 0) return;
+
+    game.ingredientSpawnTimer -= dt;
+    if (game.ingredientSpawnTimer > 0) return;
+
+    if (game.pieces.length < MAX_PIECES) {
+      spawnIngredient(
+        pickSpawnType(),
+        0,
+        1,
+        0,
+        {
+          x: CENTER.x + randomRange(-105, 105, game.orderRng),
+          y: CENTER.y - 205 + randomRange(-10, 12, game.orderRng),
+        },
+        {
+          x: randomRange(-1.3, 1.3, game.orderRng),
+          y: randomRange(-0.2, 1.2, game.orderRng),
+        },
+      );
+      game.itemMessage = "새 재료";
+      game.itemMessageTimer = Math.max(game.itemMessageTimer, 0.75);
+    }
+    game.ingredientSpawnTimer = getIngredientSpawnDelay();
+  }
+
+  function getIngredientSpawnDelay() {
+    const delay = game.feverTimer > 0 ? FEVER_SPAWN_SECONDS : BASE_SPAWN_SECONDS;
+    return delay / Math.max(0.8, meta.balance.orderDifficulty);
+  }
+
+  function updateFlippers(dt) {
+    game.flipperTimers.left = Math.max(0, game.flipperTimers.left - dt);
+    game.flipperTimers.right = Math.max(0, game.flipperTimers.right - dt);
   }
 
   function frame(timestamp) {
@@ -1253,21 +1606,21 @@
   }
 
   function updateGame(dt) {
-    const input = Number(controls.right) - Number(controls.left);
-    const rotatePower = getCharacterStats().rotate;
-    game.trayVelocity += input * 8.2 * rotatePower * dt;
-    game.trayVelocity *= Math.pow(0.78, dt * 5.8);
-    game.trayVelocity = clamp(game.trayVelocity, -3.2 * rotatePower, 3.2 * rotatePower);
-    game.trayAngle = normalizeAngle(game.trayAngle + game.trayVelocity * dt);
+    game.trayVelocity *= Math.pow(0.65, dt * 5.8);
+    game.trayAngle = normalizeAngle(game.trayAngle + game.trayVelocity * dt * 0.18);
     updateTrayBodies();
 
     applyMagnetForces();
+    applyDeliveryAssist();
     Engine.update(game.engine, dt * 1000);
+    processMerges();
     containEscapedPieces();
     updateScoring(dt);
+    updateIngredientSpawns(dt);
     updateItemTimers(dt);
     updateFever(dt);
     updateSkill(dt);
+    updateFlippers(dt);
     updateCharacterReaction(dt);
 
     if (game.nextOrderDelay > 0) {
@@ -1329,7 +1682,7 @@
       const distance = Math.hypot(dx, dy);
       if (distance > TRAY_RADIUS + 120) {
         resetPiece(piece);
-        applyPenalty(20);
+        applyPenalty(2);
         registerMistake();
       }
     }
@@ -1337,7 +1690,7 @@
 
   function updateScoring(dt) {
     for (const piece of [...game.pieces]) {
-      if (piece.scored) continue;
+      if (piece.scored || piece.merging) continue;
       piece.bump = Math.max(0, piece.bump - dt);
 
       const body = piece.body;
@@ -1345,19 +1698,27 @@
 
       if (slot && isForbiddenSlot(slot, piece)) {
         piece.forbiddenHold += dt;
+        piece.hold = 0;
         piece.wrongHold = 0;
-        if (piece.forbiddenHold >= 0.78) {
+        if (piece.forbiddenHold >= FORBIDDEN_HOLD_SECONDS) {
           punishForbiddenPiece(piece);
         }
-      } else if (slot && slot.type === piece.type && needsMore(piece.type)) {
-        scorePiece(piece, slot);
-      } else if (slot && slot.type !== piece.type) {
+      } else if (slot && slot.type === piece.type && needsMore(piece.type, piece.level)) {
+        piece.hold += dt;
+        piece.wrongHold = 0;
+        piece.forbiddenHold = Math.max(0, piece.forbiddenHold - dt * 1.8);
+        if (piece.hold >= DELIVERY_HOLD_SECONDS) {
+          scorePiece(piece, slot);
+        }
+      } else if (slot && slot.type !== piece.type && piece.level > 0) {
+        piece.hold = 0;
         piece.forbiddenHold = Math.max(0, piece.forbiddenHold - dt * 1.8);
         piece.wrongHold += dt;
-        if (piece.wrongHold >= 1.35) {
+        if (piece.wrongHold >= WRONG_HOLD_SECONDS) {
           punishPiece(piece);
         }
       } else {
+        piece.hold = Math.max(0, piece.hold - dt * 2.4);
         piece.forbiddenHold = Math.max(0, piece.forbiddenHold - dt * 1.8);
         piece.wrongHold = Math.max(0, piece.wrongHold - dt * 1.8);
       }
@@ -1375,12 +1736,14 @@
 
   function scorePiece(piece, slot) {
     piece.scored = true;
-    game.progress[piece.type] += 1;
+    const id = orderKey(piece.type, piece.level);
+    game.progress[id] = game.progress[id] || 0;
+    game.progress[id] += 1;
     game.targetDone += 1;
 
     const speedBonus = Math.max(0, Math.round(game.timeLeft * 0.35));
-    const baseScore = 120 + speedBonus;
-    const comboBonus = 120 * Math.max(0, game.combo - 1);
+    const baseScore = 220 + piece.level * 230 + speedBonus;
+    const comboBonus = (90 + piece.level * 45) * Math.max(0, game.combo - 1);
     addScore(baseScore, "base");
     addScore(comboBonus, "combo");
     if (game.orderRule.id === "spicy" && piece.type === "kimchi") {
@@ -1390,7 +1753,7 @@
     game.maxCombo = Math.max(game.maxCombo, game.combo);
     checkFeverTriggers();
 
-    burst(piece.body.position.x, piece.body.position.y, FOODS[piece.type].color, 18);
+    burst(piece.body.position.x, piece.body.position.y, FOODS[piece.type].color, 24 + piece.level * 4);
     if (game.combo >= 5 && game.combo % 5 === 0) {
       setCharacterReaction(`콤보 x${game.combo - 1}!`, "happy", 1.3);
       playSound("combo");
@@ -1723,6 +2086,7 @@
       cleanOrders: 0,
       flawlessStreak: 0,
       itemsCollected: 0,
+      mergeCount: 0,
       wrongs: 0,
       forbiddenHits: 0,
     };
@@ -2385,9 +2749,9 @@
   }
 
   function awardRunRewards() {
-    const scoreCoins = Math.floor((Math.max(0, game.score) / 700) * meta.balance.coinPayout);
-    const orderCoins = Math.round(game.completed * 5 * meta.balance.coinPayout);
-    const dailyCoins = game.mode === "daily" ? Math.round(6 * meta.balance.coinPayout) : 0;
+    const scoreCoins = Math.floor((Math.max(0, game.score) / 400) * meta.balance.coinPayout);
+    const orderCoins = Math.round(game.completed * 10 * meta.balance.coinPayout);
+    const dailyCoins = game.mode === "daily" ? Math.round(8 * meta.balance.coinPayout) : 0;
     meta.coins += scoreCoins + orderCoins + dailyCoins;
 
     game.newAchievements = unlockRunAchievements();
@@ -2611,8 +2975,9 @@
     }
   }
 
-  function needsMore(type) {
-    return (game.progress?.[type] || 0) < (game.order?.[type] || 0);
+  function needsMore(type, level = 0) {
+    const id = orderKey(type, level);
+    return (game.progress?.[id] || 0) < (game.order?.[id] || 0);
   }
 
   function getSlotForBody(body) {
@@ -2652,7 +3017,8 @@
     ui.orderMeter.style.width = `${percent}%`;
 
     ui.orderList.replaceChildren(
-      ...Object.entries(game.order || {}).map(([type, amount]) => {
+      ...Object.entries(game.order || {}).map(([id, amount]) => {
+        const { type, level } = parseOrderKey(id);
         const food = FOODS[type];
         const item = document.createElement("div");
         item.className = "order-item";
@@ -2664,9 +3030,9 @@
 
         const name = document.createElement("span");
         name.className = "order-name";
-        name.textContent = food.name;
+        name.textContent = getFoodName(type, level);
 
-        const done = game.progress?.[type] || 0;
+        const done = game.progress?.[id] || 0;
         const count = document.createElement("span");
         count.className = "order-count";
         count.textContent = `${done}/${amount}`;
@@ -2764,6 +3130,7 @@
     ctx.clearRect(0, 0, WIDTH, HEIGHT);
     drawBackdrop();
     drawTray();
+    drawFlippers();
     drawPowerItems();
     drawPieces();
     drawParticles();
@@ -2918,6 +3285,28 @@
     ctx.restore();
   }
 
+  function drawFlippers() {
+    const specs = [
+      { direction: "left", x: CENTER.x - 112, y: CENTER.y + 156, angle: -0.42 },
+      { direction: "right", x: CENTER.x + 112, y: CENTER.y + 156, angle: 0.42 },
+    ];
+
+    for (const spec of specs) {
+      const active = game.flipperTimers[spec.direction] > 0;
+      const swing = active ? (spec.direction === "left" ? 0.52 : -0.52) : 0;
+      ctx.save();
+      ctx.translate(spec.x, spec.y);
+      ctx.rotate(spec.angle + swing);
+      ctx.fillStyle = active ? "#f1c453" : "#244f45";
+      ctx.strokeStyle = active ? "#9b7423" : "rgba(255, 255, 255, 0.72)";
+      ctx.lineWidth = 4;
+      roundRect(-58, -8, 116, 16, 8);
+      ctx.fill();
+      ctx.stroke();
+      ctx.restore();
+    }
+  }
+
   function drawPieces() {
     for (const piece of game.pieces) {
       drawIngredient(piece);
@@ -2962,7 +3351,7 @@
 
   function drawIngredient(piece) {
     const body = piece.body;
-    const food = FOODS[piece.type];
+    const food = getFoodLevelConfig(piece.type, piece.level);
     const radius = food.radius;
     const lift = piece.bump > 0 ? piece.bump * 18 : 0;
 
@@ -2980,13 +3369,26 @@
     if (food.shape === "nori") drawNori(food, radius);
     if (food.shape === "shrimp") drawShrimp(food, radius);
 
+    if (piece.level > 0) {
+      ctx.shadowColor = "transparent";
+      ctx.fillStyle = "#ffffff";
+      ctx.strokeStyle = food.edge;
+      ctx.lineWidth = 4;
+      ctx.font = `950 ${Math.max(11, 13 + piece.level)}px system-ui, sans-serif`;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      const label = piece.level >= 2 ? food.name.slice(0, 3) : `Lv${piece.level}`;
+      ctx.strokeText(label, 0, 0);
+      ctx.fillText(label, 0, 0);
+    }
+
     ctx.shadowColor = "transparent";
     if (piece.hold > 0) {
-      drawHoldRing(radius + 9, piece.hold / 0.62, "#2c9aa0");
+      drawHoldRing(radius + 9, piece.hold / DELIVERY_HOLD_SECONDS, "#2c9aa0");
     } else if (piece.forbiddenHold > 0) {
-      drawHoldRing(radius + 9, piece.forbiddenHold / 0.78, "#e85d4f");
+      drawHoldRing(radius + 9, piece.forbiddenHold / FORBIDDEN_HOLD_SECONDS, "#e85d4f");
     } else if (piece.wrongHold > 0) {
-      drawHoldRing(radius + 9, piece.wrongHold / 1.35, "#e85d4f");
+      drawHoldRing(radius + 9, piece.wrongHold / WRONG_HOLD_SECONDS, "#e85d4f");
     }
 
     ctx.restore();
@@ -3173,14 +3575,6 @@
 
   function randomRange(min, max, rng = Math.random) {
     return min + rng() * (max - min);
-  }
-
-  function shuffle(items, rng = Math.random) {
-    for (let i = items.length - 1; i > 0; i -= 1) {
-      const j = Math.floor(rng() * (i + 1));
-      [items[i], items[j]] = [items[j], items[i]];
-    }
-    return items;
   }
 
   function randomFeverColor() {
