@@ -480,7 +480,28 @@
     { x: 116, y: -36, radius: 24, color: "#f1c453", edge: "#9b7423" },
     { x: -78, y: 94, radius: 23, color: "#6d4c96", edge: "#422b61" },
     { x: 86, y: 116, radius: 25, color: "#e85d4f", edge: "#9c302c" },
+    { x: 0, y: 178, radius: 29, color: "#2f6d5b", edge: "#18312b" },
   ];
+  const FLIPPER_SPECS = {
+    left: {
+      direction: "left",
+      side: -1,
+      x: CENTER.x - 172,
+      y: CENTER.y + 188,
+      angle: -0.34,
+      swing: -0.54,
+      hitRadius: 176,
+    },
+    right: {
+      direction: "right",
+      side: 1,
+      x: CENTER.x + 172,
+      y: CENTER.y + 188,
+      angle: 0.34,
+      swing: 0.54,
+      hitRadius: 176,
+    },
+  };
 
   const ITEMS = {
     clock: {
@@ -1068,11 +1089,12 @@
 
     unlockAudio();
     markFirstInput();
-    const side = direction === "left" ? -1 : 1;
+    const spec = FLIPPER_SPECS[direction];
+    const side = spec.side;
     const stats = getCharacterStats();
     const pivot = {
-      x: CENTER.x + side * 108,
-      y: CENTER.y + 150,
+      x: spec.x,
+      y: spec.y,
     };
     let hitCount = 0;
 
@@ -1081,14 +1103,18 @@
       const dx = body.position.x - pivot.x;
       const dy = body.position.y - pivot.y;
       const distance = Math.hypot(dx, dy);
-      const inSide = side < 0 ? body.position.x < CENTER.x + 70 : body.position.x > CENTER.x - 70;
-      if (!inSide || distance > 178 || body.position.y < CENTER.y - 78) continue;
+      const inSide = side < 0 ? body.position.x < CENTER.x + 80 : body.position.x > CENTER.x - 80;
+      const inBottomGap = Math.abs(body.position.x - CENTER.x) < 74 && body.position.y > CENTER.y + 126;
+      if ((!inSide && !inBottomGap) || distance > spec.hitRadius || body.position.y < CENTER.y + 4) continue;
 
-      const lift = 4.55 * stats.rotate;
-      const inward = -side * (3.15 + piece.level * 0.25) * stats.rotate;
+      const lift = (inBottomGap ? 6.1 : 5.25) * stats.rotate;
+      const sideKick = inBottomGap
+        ? side * (3.45 + piece.level * 0.18)
+        : -side * (3.25 + piece.level * 0.22);
+      const spread = inBottomGap ? randomRange(-0.65, 0.65, game.orderRng) : (body.position.x - CENTER.x) * 0.004;
       Body.setVelocity(body, {
-        x: body.velocity.x * 0.45 + inward,
-        y: body.velocity.y * 0.35 - lift,
+        x: body.velocity.x * 0.34 + (sideKick + spread) * stats.rotate,
+        y: body.velocity.y * 0.24 - lift,
       });
       Body.setAngularVelocity(body, randomRange(-0.28, 0.28));
       piece.bump = 0.18;
@@ -1697,6 +1723,23 @@
   function updateLaunchPads(dt) {
     for (const pad of game.launchPads) {
       pad.flash = Math.max(0, pad.flash - dt);
+    }
+
+    if (!game.running || game.awaitingFirstInput) return;
+
+    for (const piece of game.pieces) {
+      if (piece.scored || piece.merging) continue;
+
+      for (const pad of game.launchPads) {
+        const distance = Math.hypot(
+          piece.body.position.x - pad.body.position.x,
+          piece.body.position.y - pad.body.position.y,
+        );
+        if (distance <= pad.radius + piece.body.circleRadius * 0.72) {
+          triggerLaunchPad(piece, pad);
+          break;
+        }
+      }
     }
   }
 
@@ -3451,14 +3494,9 @@
   }
 
   function drawFlippers() {
-    const specs = [
-      { direction: "left", x: CENTER.x - 112, y: CENTER.y + 156, angle: -0.42 },
-      { direction: "right", x: CENTER.x + 112, y: CENTER.y + 156, angle: 0.42 },
-    ];
-
-    for (const spec of specs) {
+    for (const spec of Object.values(FLIPPER_SPECS)) {
       const active = game.flipperTimers[spec.direction] > 0;
-      const swing = active ? (spec.direction === "left" ? 0.52 : -0.52) : 0;
+      const swing = active ? spec.swing : 0;
       ctx.save();
       ctx.translate(spec.x, spec.y);
       ctx.rotate(spec.angle + swing);
