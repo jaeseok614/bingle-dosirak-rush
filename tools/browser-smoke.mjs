@@ -237,8 +237,14 @@ async function click(client, selector) {
 
 async function startRun(client) {
   await click(client, "#startButton");
-  await waitForExpression(client, "!document.querySelector('#characterSelectOverlay').hidden");
-  await click(client, "#startSelectedButton");
+  await sleep(250);
+  const characterSelectOpen = await evaluate(
+    client,
+    "!document.querySelector('#characterSelectOverlay').hidden",
+  );
+  if (characterSelectOpen) {
+    await click(client, "#startSelectedButton");
+  }
   await waitForExpression(
     client,
     "document.querySelector('#guideOverlay').hidden && document.querySelector('#characterSelectOverlay').hidden && document.querySelector('#gameOver').hidden",

@@ -89,6 +89,17 @@
             <button class="touch-zone" type="button" data-dir="left" tabindex="-1" aria-label="왼쪽 젓가락 튕기기"></button>
             <button class="touch-zone" type="button" data-dir="right" tabindex="-1" aria-label="오른쪽 젓가락 튕기기"></button>
           </div>
+          <div id="mobileOrderHud" class="mobile-order-hud" aria-live="polite">
+            <div>
+              <span>현재 주문</span>
+              <strong id="mobileOrderText">-</strong>
+            </div>
+            <div class="mobile-hud-meta">
+              <span id="mobileTimeText">60.0초</span>
+              <span id="mobileScoreText">0점</span>
+              <span id="mobileComboText">x1</span>
+            </div>
+          </div>
           <div id="characterHud" class="character-hud" aria-live="polite">
             <img id="activeCharacterImage" src="assets/characters/cook.png" alt="" />
             <div class="character-callout">
@@ -98,52 +109,27 @@
           </div>
           <div id="guideOverlay" class="guide-modal">
             <div class="guide-box" role="dialog" aria-modal="true" aria-labelledby="guideTitle">
-              <span class="result-kicker">가이드</span>
-              <h2 id="guideTitle">합쳐서 주문 칸에 배달하기</h2>
+              <span class="result-kicker">60초 도시락 합체 액션</span>
+              <h2 id="guideTitle">합치고 튕겨서 배달</h2>
               <div class="guide-steps">
                 <div class="guide-step">
                   <span class="guide-icon" aria-hidden="true">L</span>
-                  <strong>젓가락으로 튕기기</strong>
-                  <p><kbd>A</kbd>/<kbd>D</kbd>, <kbd>←</kbd>/<kbd>→</kbd> 또는 좌우 버튼으로 아래쪽 재료를 튕깁니다.</p>
+                  <strong>튕기기</strong>
+                  <p><kbd>A</kbd>/<kbd>D</kbd> 또는 화면 좌우로 재료를 젓가락처럼 튕깁니다.</p>
                 </div>
                 <div class="guide-step">
                   <span class="guide-icon guide-dot" aria-hidden="true"></span>
-                  <strong>같은 음식끼리 합치기</strong>
-                  <p>같은 재료와 같은 단계가 부딪히면 더 큰 음식으로 합쳐집니다.</p>
-                </div>
-                <div class="guide-step">
-                  <span class="guide-icon guide-launch" aria-hidden="true">↑</span>
-                  <strong>발사 구멍 밟기</strong>
-                  <p>검은 런치 구멍에 닿으면 재료가 위쪽 랜덤 방향으로 튀어오릅니다.</p>
+                  <strong>합체하기</strong>
+                  <p>같은 재료끼리 부딪히면 더 큰 음식이 됩니다. 구멍은 랜덤 발사대입니다.</p>
                 </div>
                 <div class="guide-step">
                   <span class="guide-icon guide-ring" aria-hidden="true"></span>
-                  <strong>주문 칸에 배달</strong>
-                  <p>주문 음식이 같은 재료 칸에 잠깐 머물면 배달되고 점수와 콤보가 올라갑니다.</p>
-                </div>
-                <div class="guide-step">
-                  <span class="guide-icon guide-item" aria-hidden="true">★</span>
-                  <strong>아이템을 먹기</strong>
-                  <p>반짝이는 아이템에 재료가 닿으면 시간, 콤보, 자석 효과를 얻습니다.</p>
-                </div>
-                <div class="guide-step">
-                  <span class="guide-icon guide-fever" aria-hidden="true">F</span>
-                  <strong>피버를 노리기</strong>
-                  <p>콤보 x8 또는 주문 3개 연속 완성 시 8초 동안 점수가 2배입니다.</p>
-                </div>
-                <div class="guide-step">
-                  <span class="guide-icon guide-skill" aria-hidden="true">!</span>
-                  <strong>톡 치기</strong>
-                  <p><kbd>Space</kbd> 또는 톡 치기 버튼으로 재료를 한 번 흔들 수 있습니다.</p>
-                </div>
-                <div class="guide-step">
-                  <span class="guide-icon guide-shop" aria-hidden="true">₩</span>
-                  <strong>코인과 상점</strong>
-                  <p>플레이 보상 코인으로 캐릭터와 소모 아이템을 사고 성능을 바꿀 수 있습니다.</p>
+                  <strong>배달하기</strong>
+                  <p>주문 음식이 같은 색 칸에 잠깐 머물면 배달되고 콤보가 오릅니다.</p>
                 </div>
               </div>
-              <p class="guide-tip">색 칸은 벽이 아니라 배달 영역입니다. 필요한 음식을 합친 뒤 같은 재료 칸에 안정적으로 머물게 하세요.</p>
-              <button id="startButton" class="primary-button" type="button">게임 시작</button>
+              <p class="guide-tip">첫 입력 전까지 타이머는 멈춥니다. 첫 주문부터 바로 배달해 보세요.</p>
+              <button id="startButton" class="primary-button" type="button">바로 시작</button>
             </div>
           </div>
           <div id="characterSelectOverlay" class="select-modal" hidden>

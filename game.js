@@ -26,6 +26,11 @@
     orderList: document.querySelector("#orderList"),
     orderPercent: document.querySelector("#orderPercent"),
     orderMeter: document.querySelector("#orderMeter"),
+    mobileOrderHud: document.querySelector("#mobileOrderHud"),
+    mobileOrderText: document.querySelector("#mobileOrderText"),
+    mobileTimeText: document.querySelector("#mobileTimeText"),
+    mobileScoreText: document.querySelector("#mobileScoreText"),
+    mobileComboText: document.querySelector("#mobileComboText"),
     missionList: document.querySelector("#missionList"),
     restart: document.querySelector("#restartButton"),
     guide: document.querySelector("#guideButton"),
@@ -106,6 +111,8 @@
     ".profile-strip strong",
     "#orderNumber",
     "#orderPercent",
+    "#mobileOrderText",
+    ".mobile-hud-meta span",
     ".order-count",
     ".mission-row strong",
     "#finalScore",
@@ -127,6 +134,7 @@
     ".result-actions button",
     ".action-panel button",
   ].join(",");
+  const DEBUG_MODE = new URLSearchParams(window.location.search).get("debug") === "1";
 
   const SCORE_CATEGORIES = {
     base: "기본 점수",
@@ -454,6 +462,13 @@
     nori: ["김", "김말이", "김 주먹밥", "바삭 도시락"],
     shrimp: ["새우", "새우튀김", "새우볶음밥", "해물 도시락"],
   };
+  const FOOD_SHORT_LABELS = {
+    rice: ["밥", "주먹", "김밥", "특도"],
+    egg: ["계란", "말이", "오믈", "계도"],
+    kimchi: ["김치", "볶김", "김볶", "매도"],
+    nori: ["김", "김말", "김주", "바삭"],
+    shrimp: ["새우", "튀김", "새볶", "해물"],
+  };
   const LEVEL_SCORE = [0, 180, 420, 920];
   const SLOTS = FOOD_KEYS.map((type, index) => ({
     type,
@@ -589,6 +604,7 @@
     timeBonusUsed: 0,
     running: false,
     started: false,
+    awaitingFirstInput: false,
     wasRunningBeforeGuide: false,
     wasRunningBeforeShop: false,
     mode: "normal",
@@ -639,6 +655,9 @@
   }
 
   function init() {
+    if (!DEBUG_MODE) {
+      ui.balanceButton.hidden = true;
+    }
     createEngine();
     bindControls();
     updateMetaUi();
@@ -928,6 +947,7 @@
     game.timeBonusUsed = 0;
     game.running = shouldRun;
     game.started = shouldRun;
+    game.awaitingFirstInput = shouldRun;
     game.wasRunningBeforeGuide = false;
     game.wasRunningBeforeShop = false;
     game.magnetTimer = 0;
@@ -940,7 +960,7 @@
     game.feverParticleTimer = 0;
     game.orderStreak = 0;
     game.skillCooldown = 0;
-    game.characterMessage = shouldRun ? "출발!" : "준비 완료";
+    game.characterMessage = shouldRun ? "좌우로 튕겨 시작" : "준비 완료";
     game.characterMood = shouldRun ? "happy" : "idle";
     game.characterReactionTimer = shouldRun ? 1.6 : 0;
     game.newAchievements = [];
@@ -971,7 +991,7 @@
     resetControls();
     ui.guideOverlay.hidden = true;
     ui.characterSelectOverlay.hidden = true;
-    setCharacterReaction("출발!", "happy", 1.6);
+    setCharacterReaction("좌우로 튕겨 시작", "happy", 1.6);
   }
 
   function showGuide() {
@@ -983,7 +1003,7 @@
     game.running = false;
     resetControls();
     ui.guideOverlay.hidden = false;
-    ui.start.textContent = game.started && game.timeLeft > 0 ? "계속하기" : "게임 시작";
+    ui.start.textContent = game.started && game.timeLeft > 0 ? "계속하기" : "바로 시작";
   }
 
   function closeGuide() {
@@ -992,7 +1012,7 @@
     resetControls();
 
     if (!game.started || game.timeLeft <= 0) {
-      openCharacterSelect();
+      startGame();
       return;
     }
 
@@ -1019,6 +1039,7 @@
     if (!game.running || game.skillCooldown > 0 || game.pieces.length === 0) return;
 
     unlockAudio();
+    markFirstInput();
     game.skillCooldown = SKILL_COOLDOWN * getCharacterStats().skillCooldown;
     game.itemMessage = "톡!";
     game.itemMessageTimer = 1.2;
@@ -1046,6 +1067,7 @@
     if (!game.running || !["left", "right"].includes(direction)) return;
 
     unlockAudio();
+    markFirstInput();
     const side = direction === "left" ? -1 : 1;
     const stats = getCharacterStats();
     const pivot = {
@@ -1079,6 +1101,14 @@
     game.itemMessageTimer = 0.8;
     playSound(hitCount ? "item" : "success");
     vibrate(hitCount ? 12 : 6);
+  }
+
+  function markFirstInput() {
+    if (!game.awaitingFirstInput) return;
+
+    game.awaitingFirstInput = false;
+    game.lastFrame = 0;
+    setCharacterReaction("출발!", "happy", 1.1);
   }
 
   function triggerLaunchPad(piece, pad) {
@@ -1233,6 +1263,11 @@
 
   function getFoodName(type, level = 0) {
     return FOOD_EVOLUTIONS[type]?.[clamp(Math.round(level), 0, MAX_FOOD_LEVEL)] || FOODS[type]?.name || "";
+  }
+
+  function getFoodShortLabel(type, level = 0) {
+    const safeLevel = clamp(Math.round(level), 0, MAX_FOOD_LEVEL);
+    return FOOD_SHORT_LABELS[type]?.[safeLevel] || getFoodName(type, safeLevel).slice(0, 2);
   }
 
   function getFoodLevelConfig(type, level = 0) {
@@ -1686,6 +1721,13 @@
   }
 
   function updateGame(dt) {
+    if (game.awaitingFirstInput) {
+      updateFlippers(dt);
+      updateLaunchPads(dt);
+      updateCharacterReaction(dt);
+      return;
+    }
+
     game.trayVelocity *= Math.pow(0.65, dt * 5.8);
     game.trayAngle = normalizeAngle(game.trayAngle + game.trayVelocity * dt * 0.18);
     updateTrayBodies();
@@ -2138,10 +2180,10 @@
   }
 
   function buildShareText() {
-    const modeText = game.mode === "daily" ? `오늘 챌린지 ${game.dailyDate}` : "일반 모드";
+    const modeText = game.mode === "daily" ? `오늘의 도시락 #${game.dailyDate}` : "일반 모드";
     const score = Math.round(game.score).toLocaleString("ko-KR");
     const combo = Math.max(1, game.maxCombo - 1);
-    return `빙글도시락 러시 ${score}점 / 도시락 ${game.completed}개 / 최고 콤보 x${combo} / ${getCharacter().name} / ${modeText}`;
+    return `빙글도시락 러시 ${score}점 / 도시락 ${game.completed}개 / 최고 콤보 x${combo} / ${getCharacter().name} / ${modeText} / 너도 해봐!`;
   }
 
   async function copyResultText() {
@@ -2424,6 +2466,8 @@
   }
 
   function openBalance() {
+    if (!DEBUG_MODE) return;
+
     unlockAudio();
     game.wasRunningBeforeShop = game.running;
     game.running = false;
@@ -3104,6 +3148,7 @@
     ui.skill.disabled = game.skillCooldown > 0 || !game.started || !game.running;
     updateModeAndRuleUi();
     updateMetaUi();
+    updateMobileHud();
 
     if (!force) {
       scheduleFitText();
@@ -3142,6 +3187,26 @@
     );
     renderMissions();
     scheduleFitText();
+  }
+
+  function updateMobileHud() {
+    if (!ui.mobileOrderHud) return;
+
+    const entries = Object.entries(game.order || {});
+    if (!entries.length) {
+      ui.mobileOrderText.textContent = "-";
+    } else {
+      const [id, amount] = entries[0];
+      const { type, level } = parseOrderKey(id);
+      const done = game.progress?.[id] || 0;
+      const extra = entries.length > 1 ? ` 외 ${entries.length - 1}` : "";
+      ui.mobileOrderText.textContent = `${getFoodName(type, level)} ${done}/${amount}${extra}`;
+    }
+
+    ui.mobileTimeText.textContent = `${game.timeLeft.toFixed(1)}초`;
+    ui.mobileScoreText.textContent = `${Math.round(game.score).toLocaleString("ko-KR")}점`;
+    ui.mobileComboText.textContent = `x${game.combo}`;
+    ui.mobileOrderHud.classList.toggle("is-paused", game.awaitingFirstInput);
   }
 
   function scheduleFitText() {
@@ -3222,7 +3287,7 @@
     if (game.skillCooldown > 0) {
       return `톡 ${Math.ceil(game.skillCooldown)}초`;
     }
-    return "톡 치기";
+    return "톡!";
   }
 
   function draw() {
@@ -3521,18 +3586,16 @@
     if (food.shape === "nori") drawNori(food, radius);
     if (food.shape === "shrimp") drawShrimp(food, radius);
 
-    if (piece.level > 0) {
-      ctx.shadowColor = "transparent";
-      ctx.fillStyle = "#ffffff";
-      ctx.strokeStyle = food.edge;
-      ctx.lineWidth = 4;
-      ctx.font = `950 ${Math.max(11, 13 + piece.level)}px system-ui, sans-serif`;
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-      const label = piece.level >= 2 ? food.name.slice(0, 3) : `Lv${piece.level}`;
-      ctx.strokeText(label, 0, 0);
-      ctx.fillText(label, 0, 0);
-    }
+    ctx.shadowColor = "transparent";
+    ctx.fillStyle = piece.level > 0 ? "#ffffff" : food.accent;
+    ctx.strokeStyle = piece.level > 0 ? food.edge : "rgba(255, 255, 255, 0.82)";
+    ctx.lineWidth = piece.level > 0 ? 4 : 3;
+    ctx.font = `950 ${Math.max(11, Math.min(16, radius * 0.62))}px system-ui, sans-serif`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    const label = getFoodShortLabel(piece.type, piece.level);
+    ctx.strokeText(label, 0, 0);
+    ctx.fillText(label, 0, 0);
 
     ctx.shadowColor = "transparent";
     if (piece.hold > 0) {
