@@ -98,6 +98,8 @@
   const FEVER_SPAWN_SECONDS = 1.15;
   const STARTER_PIECES = 8;
   const MAX_FOOD_LEVEL = 3;
+  const LAUNCH_PAD_COOLDOWN_MS = 520;
+  const MAX_TIME_BONUS = 8;
   const TAU = Math.PI * 2;
   const FIT_TEXT_SELECTOR = [
     ".stat-cell strong",
@@ -458,6 +460,13 @@
     angle: -Math.PI / 2 + index * (TAU / FOOD_KEYS.length),
   }));
 
+  const LAUNCH_PAD_LAYOUT = [
+    { x: -112, y: -68, radius: 26, color: "#2c9aa0", edge: "#17646d" },
+    { x: 116, y: -36, radius: 24, color: "#f1c453", edge: "#9b7423" },
+    { x: -78, y: 94, radius: 23, color: "#6d4c96", edge: "#422b61" },
+    { x: 86, y: 116, radius: 25, color: "#e85d4f", edge: "#9c302c" },
+  ];
+
   const ITEMS = {
     clock: {
       name: "시간 절임",
@@ -555,6 +564,7 @@
     engine: null,
     world: null,
     trayBodies: [],
+    launchPads: [],
     pieces: [],
     pendingMerges: new Set(),
     powerItems: [],
@@ -576,6 +586,7 @@
     breakdown: createBreakdown(),
     runStats: createRunStats(),
     timeLeft: GAME_SECONDS,
+    timeBonusUsed: 0,
     running: false,
     started: false,
     wasRunningBeforeGuide: false,
@@ -657,10 +668,14 @@
         const b = pair.bodyB.plugin?.ingredient;
         const itemA = pair.bodyA.plugin?.powerItem;
         const itemB = pair.bodyB.plugin?.powerItem;
+        const padA = pair.bodyA.plugin?.launchPad;
+        const padB = pair.bodyB.plugin?.launchPad;
         if (a) a.bump = 0.14;
         if (b) b.bump = 0.14;
         if (a && itemB) collectPowerItem(itemB);
         if (b && itemA) collectPowerItem(itemA);
+        if (a && padB) triggerLaunchPad(a, padB);
+        if (b && padA) triggerLaunchPad(b, padA);
         if (a && b) queueMerge(a, b);
       }
     });
@@ -799,7 +814,31 @@
     game.trayBodies.push(centerBumper);
 
     World.add(game.world, game.trayBodies);
+    buildLaunchPads();
     updateTrayBodies();
+  }
+
+  function buildLaunchPads() {
+    game.launchPads = LAUNCH_PAD_LAYOUT.map((config, index) => {
+      const pad = {
+        id: `launch-${index}`,
+        ...config,
+        body: Bodies.circle(0, 0, config.radius, {
+          isStatic: true,
+          isSensor: true,
+          label: `launch-pad:${index}`,
+        }),
+        flash: 0,
+        phase: index * 1.7,
+      };
+      pad.body.plugin.launchPad = pad;
+      return pad;
+    });
+    World.add(
+      game.world,
+      game.launchPads.map((pad) => pad.body),
+    );
+    updateLaunchPadBodies();
   }
 
   function updateTrayBodies() {
@@ -816,7 +855,22 @@
       );
       Body.setAngle(body, local.angle + game.trayAngle, true);
     }
+    updateLaunchPadBodies();
     updatePowerItemBodies();
+  }
+
+  function updateLaunchPadBodies() {
+    for (const pad of game.launchPads) {
+      const worldPoint = rotatePoint(pad.x, pad.y, game.trayAngle);
+      Body.setPosition(
+        pad.body,
+        {
+          x: CENTER.x + worldPoint.x,
+          y: CENTER.y + worldPoint.y,
+        },
+        true,
+      );
+    }
   }
 
   function updatePowerItemBodies() {
@@ -871,6 +925,7 @@
     game.breakdown = createBreakdown();
     game.runStats = createRunStats();
     game.timeLeft = GAME_SECONDS + getCharacterStats().startTime;
+    game.timeBonusUsed = 0;
     game.running = shouldRun;
     game.started = shouldRun;
     game.wasRunningBeforeGuide = false;
@@ -1024,6 +1079,30 @@
     game.itemMessageTimer = 0.8;
     playSound(hitCount ? "item" : "success");
     vibrate(hitCount ? 12 : 6);
+  }
+
+  function triggerLaunchPad(piece, pad) {
+    if (!game.running || piece.scored || piece.merging) return;
+
+    const now = performance.now();
+    if (now - piece.lastLaunchAt < LAUNCH_PAD_COOLDOWN_MS) return;
+    piece.lastLaunchAt = now;
+
+    const angle = -Math.PI / 2 + randomRange(-0.72, 0.72, game.orderRng);
+    const speed = randomRange(7.4, 10.2, game.orderRng) / (1 + piece.level * 0.05);
+    Body.setVelocity(piece.body, {
+      x: piece.body.velocity.x * 0.22 + Math.cos(angle) * speed,
+      y: piece.body.velocity.y * 0.18 + Math.sin(angle) * speed,
+    });
+    Body.setAngularVelocity(piece.body, randomRange(-0.42, 0.42, game.orderRng));
+    piece.bump = 0.24;
+    pad.flash = 0.38;
+    game.trayVelocity += randomRange(-0.08, 0.08, game.orderRng);
+    game.itemMessage = "발사!";
+    game.itemMessageTimer = 0.9;
+    burst(pad.body.position.x, pad.body.position.y, pad.color, 16);
+    playSound("item");
+    vibrate(10);
   }
 
   function clearIngredients() {
@@ -1239,6 +1318,7 @@
       wrongHold: 0,
       forbiddenHold: 0,
       bump: 0,
+      lastLaunchAt: 0,
       scored: false,
       merging: false,
       bornAt: performance.now(),
@@ -1404,7 +1484,7 @@
 
   function applyPowerEffect(type) {
     if (type === "clock") {
-      game.timeLeft = Math.min(getTimeCap(), game.timeLeft + 5);
+      addBonusTime(5);
       addScore(80, "item");
     }
 
@@ -1419,6 +1499,15 @@
       game.magnetTimer = Math.max(game.magnetTimer, 6 * getCharacterStats().magnet);
       addScore(60, "item");
     }
+  }
+
+  function addBonusTime(seconds) {
+    const amount = Math.min(seconds, Math.max(0, MAX_TIME_BONUS - game.timeBonusUsed));
+    if (amount <= 0) return 0;
+
+    game.timeBonusUsed += amount;
+    game.timeLeft += amount;
+    return amount;
   }
 
   function addScore(amount, category = "base") {
@@ -1570,6 +1659,12 @@
     game.flipperTimers.right = Math.max(0, game.flipperTimers.right - dt);
   }
 
+  function updateLaunchPads(dt) {
+    for (const pad of game.launchPads) {
+      pad.flash = Math.max(0, pad.flash - dt);
+    }
+  }
+
   function frame(timestamp) {
     const previous = game.lastFrame || timestamp;
     const dt = Math.min(0.033, Math.max(0.001, (timestamp - previous) / 1000));
@@ -1606,6 +1701,7 @@
     updateFever(dt);
     updateSkill(dt);
     updateFlippers(dt);
+    updateLaunchPads(dt);
     updateCharacterReaction(dt);
 
     if (game.nextOrderDelay > 0) {
@@ -2710,7 +2806,7 @@
 
     meta.inventory[id] -= 1;
     if (id === "timeTicket") {
-      game.timeLeft = Math.min(getTimeCap(), game.timeLeft + 5);
+      addBonusTime(5);
       game.itemMessage = "시간 쿠폰 +5초";
     }
     if (id === "comboSpice") {
@@ -2905,10 +3001,6 @@
     if (rounded > 0) return `+${rounded.toLocaleString("ko-KR")}`;
     if (rounded < 0) return `-${Math.abs(rounded).toLocaleString("ko-KR")}`;
     return "0";
-  }
-
-  function getTimeCap() {
-    return GAME_SECONDS + getCharacterStats().startTime + 10;
   }
 
   function unlockAudio() {
@@ -3137,6 +3229,7 @@
     ctx.clearRect(0, 0, WIDTH, HEIGHT);
     drawBackdrop();
     drawTray();
+    drawLaunchPads();
     drawFlippers();
     drawPowerItems();
     drawPieces();
@@ -3310,6 +3403,58 @@
       roundRect(-58, -8, 116, 16, 8);
       ctx.fill();
       ctx.stroke();
+      ctx.restore();
+    }
+  }
+
+  function drawLaunchPads() {
+    const time = performance.now() / 220;
+
+    for (const pad of game.launchPads) {
+      const pulse = Math.sin(time + pad.phase) * 2.5;
+      const flash = pad.flash / 0.38;
+
+      ctx.save();
+      ctx.translate(pad.body.position.x, pad.body.position.y);
+      ctx.shadowColor = pad.color;
+      ctx.shadowBlur = 10 + flash * 18;
+
+      ctx.fillStyle = "#10231f";
+      ctx.strokeStyle = pad.edge;
+      ctx.lineWidth = 5;
+      ctx.beginPath();
+      ctx.arc(0, 0, pad.radius + pulse + flash * 8, 0, TAU);
+      ctx.fill();
+      ctx.stroke();
+
+      ctx.shadowColor = "transparent";
+      ctx.strokeStyle = pad.color;
+      ctx.lineWidth = 4;
+      ctx.beginPath();
+      ctx.arc(0, 0, pad.radius * 0.62 + flash * 6, 0, TAU);
+      ctx.stroke();
+
+      ctx.fillStyle = flash > 0 ? "#ffffff" : pad.color;
+      ctx.beginPath();
+      ctx.moveTo(0, -pad.radius * 0.62);
+      ctx.lineTo(pad.radius * 0.42, 0);
+      ctx.lineTo(pad.radius * 0.16, 0);
+      ctx.lineTo(pad.radius * 0.16, pad.radius * 0.55);
+      ctx.lineTo(-pad.radius * 0.16, pad.radius * 0.55);
+      ctx.lineTo(-pad.radius * 0.16, 0);
+      ctx.lineTo(-pad.radius * 0.42, 0);
+      ctx.closePath();
+      ctx.fill();
+
+      if (flash > 0) {
+        ctx.globalAlpha = flash * 0.7;
+        ctx.strokeStyle = "#ffffff";
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.arc(0, 0, pad.radius + 12 + (1 - flash) * 20, 0, TAU);
+        ctx.stroke();
+      }
+
       ctx.restore();
     }
   }

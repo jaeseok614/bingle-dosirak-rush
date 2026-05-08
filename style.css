@@ -749,6 +749,12 @@ h1 {
   background: conic-gradient(var(--teal) 72%, #dfe8dd 0);
 }
 
+.guide-launch {
+  color: #ffffff;
+  background: #10231f;
+  border: 3px solid var(--teal);
+}
+
 .guide-item {
   color: var(--leaf-dark);
   background: var(--gold);
