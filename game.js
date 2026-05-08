@@ -83,10 +83,16 @@
   const WIDTH = 900;
   const HEIGHT = 680;
   const CENTER = { x: WIDTH / 2, y: 348 };
-  const TRAY_RADIUS = 250;
-  const TARGET_INNER = 68;
-  const TARGET_OUTER = 248;
-  const TARGET_WIDTH = (Math.PI * 2) / 5 * 0.92;
+  const ARENA = {
+    left: 92,
+    right: 808,
+    top: 66,
+    bottom: 620,
+    wall: 32,
+    slotTop: 90,
+    slotBottom: 198,
+    slotGap: 10,
+  };
   const GAME_SECONDS = 60;
   const LEADERBOARD_KEY = "bingle-dosirak-rush-leaderboard";
   const DAILY_LEADERBOARD_KEY = "bingle-dosirak-rush-daily";
@@ -470,36 +476,41 @@
     shrimp: ["새우", "튀김", "새볶", "해물"],
   };
   const LEVEL_SCORE = [0, 180, 420, 920];
+  const SLOT_WIDTH = (ARENA.right - ARENA.left - ARENA.slotGap * (FOOD_KEYS.length + 1)) / FOOD_KEYS.length;
   const SLOTS = FOOD_KEYS.map((type, index) => ({
     type,
-    angle: -Math.PI / 2 + index * (TAU / FOOD_KEYS.length),
+    index,
+    left: ARENA.left + ARENA.slotGap + index * (SLOT_WIDTH + ARENA.slotGap),
+    right: ARENA.left + ARENA.slotGap + index * (SLOT_WIDTH + ARENA.slotGap) + SLOT_WIDTH,
+    x: ARENA.left + ARENA.slotGap + index * (SLOT_WIDTH + ARENA.slotGap) + SLOT_WIDTH / 2,
+    y: (ARENA.slotTop + ARENA.slotBottom) / 2,
   }));
 
   const LAUNCH_PAD_LAYOUT = [
-    { x: -112, y: -68, radius: 26, color: "#2c9aa0", edge: "#17646d" },
-    { x: 116, y: -36, radius: 24, color: "#f1c453", edge: "#9b7423" },
-    { x: -78, y: 94, radius: 23, color: "#6d4c96", edge: "#422b61" },
-    { x: 86, y: 116, radius: 25, color: "#e85d4f", edge: "#9c302c" },
-    { x: 0, y: 178, radius: 29, color: "#2f6d5b", edge: "#18312b" },
+    { x: -178, y: -58, radius: 25, color: "#2c9aa0", edge: "#17646d" },
+    { x: 182, y: -82, radius: 24, color: "#f1c453", edge: "#9b7423" },
+    { x: -112, y: 96, radius: 24, color: "#6d4c96", edge: "#422b61" },
+    { x: 120, y: 126, radius: 25, color: "#e85d4f", edge: "#9c302c" },
+    { x: 0, y: 218, radius: 31, color: "#2f6d5b", edge: "#18312b" },
   ];
   const FLIPPER_SPECS = {
     left: {
       direction: "left",
       side: -1,
-      x: CENTER.x - 172,
-      y: CENTER.y + 188,
-      angle: -0.34,
-      swing: -0.54,
-      hitRadius: 176,
+      x: CENTER.x - 252,
+      y: CENTER.y + 220,
+      angle: 0.22,
+      swing: -0.62,
+      hitRadius: 248,
     },
     right: {
       direction: "right",
       side: 1,
-      x: CENTER.x + 172,
-      y: CENTER.y + 188,
-      angle: 0.34,
-      swing: 0.54,
-      hitRadius: 176,
+      x: CENTER.x + 252,
+      y: CENTER.y + 220,
+      angle: -0.22,
+      swing: 0.62,
+      hitRadius: 248,
     },
   };
 
@@ -826,32 +837,40 @@
   }
 
   function buildTray() {
-    const outerSegments = 32;
-    const wallThickness = 28;
-    const wallLength = (TAU * (TRAY_RADIUS + 8)) / outerSegments * 1.08;
-
-    for (let i = 0; i < outerSegments; i += 1) {
-      const angle = (i / outerSegments) * TAU;
-      const body = Bodies.rectangle(0, 0, wallLength, wallThickness, {
+    const width = ARENA.right - ARENA.left;
+    const height = ARENA.bottom - ARENA.top;
+    const wall = ARENA.wall;
+    const walls = [
+      Bodies.rectangle(ARENA.left - wall / 2, ARENA.top + height / 2, wall, height + wall, {
         isStatic: true,
-        friction: 0.26,
-        restitution: 0.18,
-      });
+        friction: 0.22,
+        restitution: 0.32,
+      }),
+      Bodies.rectangle(ARENA.right + wall / 2, ARENA.top + height / 2, wall, height + wall, {
+        isStatic: true,
+        friction: 0.22,
+        restitution: 0.32,
+      }),
+      Bodies.rectangle(ARENA.left + width / 2, ARENA.top - wall / 2, width + wall, wall, {
+        isStatic: true,
+        friction: 0.18,
+        restitution: 0.48,
+      }),
+      Bodies.rectangle(ARENA.left + width / 2, ARENA.bottom + wall / 2, width + wall, wall, {
+        isStatic: true,
+        friction: 0.2,
+        restitution: 0.4,
+      }),
+    ];
+
+    for (const body of walls) {
       body.plugin.local = {
-        x: Math.cos(angle) * (TRAY_RADIUS + wallThickness / 2 - 2),
-        y: Math.sin(angle) * (TRAY_RADIUS + wallThickness / 2 - 2),
-        angle: angle + Math.PI / 2,
+        x: body.position.x - CENTER.x,
+        y: body.position.y - CENTER.y,
+        angle: body.angle,
       };
       game.trayBodies.push(body);
     }
-
-    const centerBumper = Bodies.circle(0, 0, 26, {
-      isStatic: true,
-      friction: 0.18,
-      restitution: 0.52,
-    });
-    centerBumper.plugin.local = { x: 0, y: 0, angle: 0 };
-    game.trayBodies.push(centerBumper);
 
     World.add(game.world, game.trayBodies);
     buildLaunchPads();
@@ -884,16 +903,15 @@
   function updateTrayBodies() {
     for (const body of game.trayBodies) {
       const local = body.plugin.local;
-      const worldPoint = rotatePoint(local.x, local.y, game.trayAngle);
       Body.setPosition(
         body,
         {
-          x: CENTER.x + worldPoint.x,
-          y: CENTER.y + worldPoint.y,
+          x: CENTER.x + local.x,
+          y: CENTER.y + local.y,
         },
         true,
       );
-      Body.setAngle(body, local.angle + game.trayAngle, true);
+      Body.setAngle(body, local.angle, true);
     }
     updateLaunchPadBodies();
     updatePowerItemBodies();
@@ -901,12 +919,11 @@
 
   function updateLaunchPadBodies() {
     for (const pad of game.launchPads) {
-      const worldPoint = rotatePoint(pad.x, pad.y, game.trayAngle);
       Body.setPosition(
         pad.body,
         {
-          x: CENTER.x + worldPoint.x,
-          y: CENTER.y + worldPoint.y,
+          x: CENTER.x + pad.x,
+          y: CENTER.y + pad.y,
         },
         true,
       );
@@ -915,12 +932,11 @@
 
   function updatePowerItemBodies() {
     for (const item of game.powerItems) {
-      const worldPoint = rotatePoint(item.local.x, item.local.y, game.trayAngle);
       Body.setPosition(
         item.body,
         {
-          x: CENTER.x + worldPoint.x,
-          y: CENTER.y + worldPoint.y,
+          x: CENTER.x + item.local.x,
+          y: CENTER.y + item.local.y,
         },
         true,
       );
@@ -1103,18 +1119,16 @@
       const dx = body.position.x - pivot.x;
       const dy = body.position.y - pivot.y;
       const distance = Math.hypot(dx, dy);
-      const inSide = side < 0 ? body.position.x < CENTER.x + 80 : body.position.x > CENTER.x - 80;
-      const inBottomGap = Math.abs(body.position.x - CENTER.x) < 74 && body.position.y > CENTER.y + 126;
-      if ((!inSide && !inBottomGap) || distance > spec.hitRadius || body.position.y < CENTER.y + 4) continue;
+      const inSide = side < 0 ? body.position.x < CENTER.x + 132 : body.position.x > CENTER.x - 132;
+      const inBottomGap = Math.abs(body.position.x - CENTER.x) < 118 && body.position.y > CENTER.y + 118;
+      if ((!inSide && !inBottomGap) || distance > spec.hitRadius || body.position.y < CENTER.y + 16) continue;
 
-      const lift = (inBottomGap ? 6.1 : 5.25) * stats.rotate;
-      const sideKick = inBottomGap
-        ? side * (3.45 + piece.level * 0.18)
-        : -side * (3.25 + piece.level * 0.22);
-      const spread = inBottomGap ? randomRange(-0.65, 0.65, game.orderRng) : (body.position.x - CENTER.x) * 0.004;
+      const lift = (inBottomGap ? 12.4 : 10.6) * stats.rotate;
+      const sideKick = -side * (4.15 + piece.level * 0.26);
+      const spread = inBottomGap ? randomRange(-0.85, 0.85, game.orderRng) : (body.position.x - CENTER.x) * 0.003;
       Body.setVelocity(body, {
-        x: body.velocity.x * 0.34 + (sideKick + spread) * stats.rotate,
-        y: body.velocity.y * 0.24 - lift,
+        x: body.velocity.x * 0.22 + (sideKick + spread) * stats.rotate,
+        y: body.velocity.y * 0.12 - lift,
       });
       Body.setAngularVelocity(body, randomRange(-0.28, 0.28));
       piece.bump = 0.18;
@@ -1144,8 +1158,8 @@
     if (now - piece.lastLaunchAt < LAUNCH_PAD_COOLDOWN_MS) return;
     piece.lastLaunchAt = now;
 
-    const angle = -Math.PI / 2 + randomRange(-0.72, 0.72, game.orderRng);
-    const speed = randomRange(7.4, 10.2, game.orderRng) / (1 + piece.level * 0.05);
+    const angle = -Math.PI / 2 + randomRange(-0.54, 0.54, game.orderRng);
+    const speed = randomRange(10.2, 13.4, game.orderRng) / (1 + piece.level * 0.04);
     Body.setVelocity(piece.body, {
       x: piece.body.velocity.x * 0.22 + Math.cos(angle) * speed,
       y: piece.body.velocity.y * 0.18 + Math.sin(angle) * speed,
@@ -1358,8 +1372,8 @@
     const spread = Math.min(120, 34 * total);
     const offset = index - (total - 1) / 2;
     const body = Bodies.circle(
-      position?.x ?? CENTER.x + offset * 20 + randomRange(-12, 12, game.orderRng),
-      position?.y ?? CENTER.y - 80 + randomRange(-spread * 0.2, spread * 0.18, game.orderRng),
+      position?.x ?? CENTER.x + offset * 26 + randomRange(-16, 16, game.orderRng),
+      position?.y ?? ARENA.top + 214 + randomRange(-spread * 0.14, spread * 0.14, game.orderRng),
       food.radius,
       {
         friction: food.friction,
@@ -1489,12 +1503,13 @@
     if (!game.running || game.powerItems.length > 0) return;
 
     const type = ITEM_KEYS[Math.floor(game.itemRng() * ITEM_KEYS.length)];
-    const angle = randomRange(0, TAU, game.itemRng);
-    const radius = randomRange(78, 182, game.itemRng);
     const item = {
       id: cryptoId(),
       type,
-      local: polar(angle, radius),
+      local: {
+        x: randomRange(ARENA.left + 96, ARENA.right - 96, game.itemRng) - CENTER.x,
+        y: randomRange(ARENA.slotBottom + 64, ARENA.bottom - 116, game.itemRng) - CENTER.y,
+      },
       body: Bodies.circle(0, 0, 22, {
         isStatic: true,
         isSensor: true,
@@ -1605,9 +1620,7 @@
       if (!target && needsMore(piece.type, piece.level)) {
         const slot = SLOTS.find((candidate) => candidate.type === piece.type);
         if (slot) {
-          const targetLocal = polar(slot.angle, 176);
-          const point = rotatePoint(targetLocal.x, targetLocal.y, game.trayAngle);
-          target = { x: CENTER.x + point.x, y: CENTER.y + point.y };
+          target = { x: slot.x, y: slot.y };
         }
       }
       if (!target) continue;
@@ -1630,23 +1643,18 @@
     for (const piece of game.pieces) {
       if (piece.scored || piece.merging || !needsMore(piece.type, piece.level)) continue;
 
-      const local = toTrayLocal(piece.body.position.x, piece.body.position.y);
-      const distance = Math.hypot(local.x, local.y);
-      if (distance < TARGET_INNER || distance > TARGET_OUTER + 100) continue;
-
       const slot = SLOTS.find((candidate) => candidate.type === piece.type);
       if (!slot) continue;
 
-      const angle = Math.atan2(local.y, local.x);
-      const angleGap = Math.abs(angleDelta(angle, slot.angle));
+      if (piece.body.position.y > ARENA.bottom - 112) continue;
 
-      const targetLocal = polar(slot.angle, 164);
-      const target = rotatePoint(targetLocal.x, targetLocal.y, game.trayAngle);
-      const dx = CENTER.x + target.x - piece.body.position.x;
-      const dy = CENTER.y + target.y - piece.body.position.y;
+      const dx = slot.x - piece.body.position.x;
+      const dy = slot.y - piece.body.position.y;
       const pullDistance = Math.max(72, Math.hypot(dx, dy));
-      const slotScale = angleGap <= TARGET_WIDTH * 0.7 ? 1 : 0.42;
-      const strength = 0.00005 * slotScale * piece.body.mass;
+      const xGap = Math.abs(piece.body.position.x - slot.x);
+      const slotScale = piece.body.position.y < CENTER.y + 88 ? 1 : 0.36;
+      const aimScale = xGap <= SLOT_WIDTH * 0.82 ? 1 : 0.54;
+      const strength = 0.000075 * slotScale * aimScale * piece.body.mass;
 
       Body.applyForce(piece.body, piece.body.position, {
         x: (dx / pullDistance) * strength,
@@ -1696,8 +1704,8 @@
         1,
         0,
         {
-          x: CENTER.x + randomRange(-105, 105, game.orderRng),
-          y: CENTER.y - 205 + randomRange(-10, 12, game.orderRng),
+          x: CENTER.x + randomRange(-176, 176, game.orderRng),
+          y: ARENA.top + 170 + randomRange(-8, 14, game.orderRng),
         },
         {
           x: randomRange(-1.3, 1.3, game.orderRng),
@@ -1771,8 +1779,8 @@
       return;
     }
 
-    game.trayVelocity *= Math.pow(0.65, dt * 5.8);
-    game.trayAngle = normalizeAngle(game.trayAngle + game.trayVelocity * dt * 0.18);
+    game.trayVelocity *= Math.pow(0.35, dt * 5.8);
+    game.trayAngle = 0;
     updateTrayBodies();
 
     applyMagnetForces();
@@ -1828,10 +1836,12 @@
     game.feverParticleTimer -= dt;
 
     if (game.feverParticleTimer <= 0) {
-      const angle = randomRange(0, TAU);
-      const radius = randomRange(90, 230);
-      const point = rotatePoint(Math.cos(angle) * radius, Math.sin(angle) * radius, game.trayAngle);
-      burst(CENTER.x + point.x, CENTER.y + point.y, randomFeverColor(), 5);
+      burst(
+        randomRange(ARENA.left + 34, ARENA.right - 34),
+        randomRange(ARENA.top + 42, ARENA.bottom - 42),
+        randomFeverColor(),
+        5,
+      );
       game.feverParticleTimer = 0.18;
     }
   }
@@ -1843,10 +1853,12 @@
   function containEscapedPieces() {
     for (const piece of game.pieces) {
       const body = piece.body;
-      const dx = body.position.x - CENTER.x;
-      const dy = body.position.y - CENTER.y;
-      const distance = Math.hypot(dx, dy);
-      if (distance > TRAY_RADIUS + 120) {
+      if (
+        body.position.x < ARENA.left - 130 ||
+        body.position.x > ARENA.right + 130 ||
+        body.position.y < ARENA.top - 170 ||
+        body.position.y > ARENA.bottom + 150
+      ) {
         resetPiece(piece);
         game.itemMessage = "재투입";
         game.itemMessageTimer = 0.8;
@@ -1893,11 +1905,12 @@
   }
 
   function stabilizeDeliveryPiece(piece, slot, dt) {
-    const local = toTrayLocal(piece.body.position.x, piece.body.position.y);
-    const targetLocal = polar(slot.angle, clamp(Math.hypot(local.x, local.y), TARGET_INNER + 34, TARGET_OUTER - 34));
-    const target = rotatePoint(targetLocal.x, targetLocal.y, game.trayAngle);
-    const dx = CENTER.x + target.x - piece.body.position.x;
-    const dy = CENTER.y + target.y - piece.body.position.y;
+    const target = {
+      x: slot.x,
+      y: clamp(piece.body.position.y, ARENA.slotTop + 26, ARENA.slotBottom - 26),
+    };
+    const dx = target.x - piece.body.position.x;
+    const dy = target.y - piece.body.position.y;
     const distance = Math.max(42, Math.hypot(dx, dy));
     const strength = 0.00009 * piece.body.mass;
 
@@ -2003,12 +2016,12 @@
 
   function resetPiece(piece) {
     Body.setPosition(piece.body, {
-      x: CENTER.x + randomRange(-35, 35),
-      y: CENTER.y - 80 + randomRange(-20, 20),
+      x: CENTER.x + randomRange(-88, 88),
+      y: ARENA.top + 218 + randomRange(-20, 20),
     });
     Body.setVelocity(piece.body, {
-      x: randomRange(-1.5, 1.5),
-      y: randomRange(-2, 0.5),
+      x: randomRange(-1.8, 1.8),
+      y: randomRange(-1.2, 0.8),
     });
     Body.setAngularVelocity(piece.body, randomRange(-0.08, 0.08));
   }
@@ -3167,13 +3180,10 @@
   }
 
   function getSlotForBody(body) {
-    const local = toTrayLocal(body.position.x, body.position.y);
-    const distance = Math.hypot(local.x, local.y);
-    if (distance < TARGET_INNER || distance > TARGET_OUTER) return null;
+    if (body.position.y < ARENA.slotTop || body.position.y > ARENA.slotBottom) return null;
 
-    const angle = Math.atan2(local.y, local.x);
     for (const slot of SLOTS) {
-      if (Math.abs(angleDelta(angle, slot.angle)) <= TARGET_WIDTH / 2) {
+      if (body.position.x >= slot.left && body.position.x <= slot.right) {
         return slot;
       }
     }
@@ -3381,71 +3391,46 @@
   }
 
   function drawTray() {
-    ctx.save();
-    ctx.translate(CENTER.x, CENTER.y + 16);
-    ctx.scale(1.02, 0.22);
-    ctx.fillStyle = "rgba(24, 49, 43, 0.18)";
-    ctx.beginPath();
-    ctx.arc(0, 0, TRAY_RADIUS + 28, 0, TAU);
-    ctx.fill();
-    ctx.restore();
+    const width = ARENA.right - ARENA.left;
+    const height = ARENA.bottom - ARENA.top;
 
     ctx.save();
-    ctx.translate(CENTER.x, CENTER.y);
-    ctx.rotate(game.trayAngle);
+    ctx.fillStyle = "rgba(24, 49, 43, 0.18)";
+    roundRect(ARENA.left + 24, ARENA.bottom + 12, width - 48, 28, 14);
+    ctx.fill();
 
     ctx.fillStyle = "#244f45";
-    ctx.beginPath();
-    ctx.arc(0, 0, TRAY_RADIUS + 31, 0, TAU);
+    roundRect(ARENA.left - 22, ARENA.top - 22, width + 44, height + 44, 30);
     ctx.fill();
 
     ctx.fillStyle = "#fbfaf2";
-    ctx.beginPath();
-    ctx.arc(0, 0, TRAY_RADIUS + 6, 0, TAU);
+    roundRect(ARENA.left, ARENA.top, width, height, 22);
     ctx.fill();
 
     for (const slot of SLOTS) {
       drawTargetSlot(slot);
     }
 
-    ctx.strokeStyle = "#244f45";
-    ctx.lineWidth = 8;
-    ctx.beginPath();
-    ctx.arc(0, 0, TARGET_INNER - 8, 0, TAU);
-    ctx.stroke();
-
-    ctx.lineCap = "round";
-    for (let i = 0; i < FOOD_KEYS.length; i += 1) {
-      const boundary = -Math.PI / 2 + (i + 0.5) * (TAU / FOOD_KEYS.length);
-      const start = polar(boundary, TARGET_OUTER - 42);
-      const end = polar(boundary, TARGET_OUTER - 6);
-      ctx.strokeStyle = "rgba(36, 79, 69, 0.72)";
-      ctx.lineWidth = 6;
+    ctx.strokeStyle = "rgba(36, 79, 69, 0.16)";
+    ctx.lineWidth = 2;
+    ctx.setLineDash([8, 12]);
+    for (let i = 1; i < SLOTS.length; i += 1) {
+      const x = SLOTS[i].left - ARENA.slotGap / 2;
       ctx.beginPath();
-      ctx.moveTo(start.x, start.y);
-      ctx.lineTo(end.x, end.y);
-      ctx.stroke();
-
-      ctx.strokeStyle = "rgba(255, 255, 255, 0.5)";
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.moveTo(start.x, start.y);
-      ctx.lineTo(end.x, end.y);
+      ctx.moveTo(x, ARENA.slotBottom + 20);
+      ctx.lineTo(x, ARENA.bottom - 70);
       ctx.stroke();
     }
+    ctx.setLineDash([]);
 
-    ctx.fillStyle = "#d9ead9";
     ctx.strokeStyle = "#244f45";
-    ctx.lineWidth = 8;
-    ctx.beginPath();
-    ctx.arc(0, 0, 27, 0, TAU);
-    ctx.fill();
+    ctx.lineWidth = 10;
+    roundRect(ARENA.left + 2, ARENA.top + 2, width - 4, height - 4, 20);
     ctx.stroke();
 
-    ctx.strokeStyle = "#244f45";
-    ctx.lineWidth = 11;
-    ctx.beginPath();
-    ctx.arc(0, 0, TRAY_RADIUS + 4, 0, TAU);
+    ctx.strokeStyle = "rgba(255, 255, 255, 0.62)";
+    ctx.lineWidth = 2;
+    roundRect(ARENA.left + 12, ARENA.top + 12, width - 24, height - 24, 16);
     ctx.stroke();
 
     ctx.restore();
@@ -3453,43 +3438,45 @@
 
   function drawTargetSlot(slot) {
     const food = FOODS[slot.type];
-    const start = slot.angle - TARGET_WIDTH / 2;
-    const end = slot.angle + TARGET_WIDTH / 2;
-    drawAnnularWedge(start, end, TARGET_INNER, TARGET_OUTER, food.color, 0.7);
+    const width = slot.right - slot.left;
+    const height = ARENA.slotBottom - ARENA.slotTop;
+    const isOrdered = Object.entries(game.order || {}).some(([id, amount]) => {
+      const { type, level } = parseOrderKey(id);
+      return type === slot.type && (game.progress?.[id] || 0) < amount && needsMore(type, level);
+    });
+
+    ctx.save();
+    ctx.fillStyle = food.color;
+    ctx.globalAlpha = isOrdered ? 0.88 : 0.62;
+    roundRect(slot.left, ARENA.slotTop, width, height, 12);
+    ctx.fill();
+    ctx.globalAlpha = 1;
+
+    ctx.strokeStyle = isOrdered ? food.edge : "rgba(36, 79, 69, 0.42)";
+    ctx.lineWidth = isOrdered ? 6 : 3;
+    roundRect(slot.left, ARENA.slotTop, width, height, 12);
+    ctx.stroke();
+
     if (game.orderRule.id === "forbidden" && slot.type === game.forbiddenType) {
-      drawAnnularWedge(start, end, TARGET_INNER, TARGET_OUTER, "#e85d4f", 0.34);
+      ctx.fillStyle = "rgba(232, 93, 79, 0.32)";
+      roundRect(slot.left + 5, ARENA.slotTop + 5, width - 10, height - 10, 10);
+      ctx.fill();
     }
 
-    const labelPoint = polar(slot.angle, 182);
-    ctx.save();
-    ctx.translate(labelPoint.x, labelPoint.y);
-    ctx.rotate(-game.trayAngle);
     ctx.fillStyle = food.edge;
     ctx.strokeStyle = "rgba(255, 255, 255, 0.85)";
     ctx.lineWidth = 5;
     ctx.font = "900 26px system-ui, sans-serif";
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
-    ctx.strokeText(food.name, 0, 0);
-    ctx.fillText(food.name, 0, 0);
+    ctx.strokeText(food.name, slot.x, slot.y - 6);
+    ctx.fillText(food.name, slot.x, slot.y - 6);
     if (game.orderRule.id === "forbidden" && slot.type === game.forbiddenType) {
       ctx.font = "950 19px system-ui, sans-serif";
       ctx.fillStyle = "#e85d4f";
-      ctx.strokeText("금지", 0, 30);
-      ctx.fillText("금지", 0, 30);
+      ctx.strokeText("금지", slot.x, slot.y + 28);
+      ctx.fillText("금지", slot.x, slot.y + 28);
     }
-    ctx.restore();
-  }
-
-  function drawAnnularWedge(start, end, inner, outer, color, alpha) {
-    ctx.save();
-    ctx.globalAlpha = alpha;
-    ctx.fillStyle = color;
-    ctx.beginPath();
-    ctx.arc(0, 0, outer, start, end);
-    ctx.arc(0, 0, inner, end, start, true);
-    ctx.closePath();
-    ctx.fill();
     ctx.restore();
   }
 
@@ -3792,34 +3779,6 @@
 
   function pulseSlot() {
     game.trayVelocity += game.trayVelocity >= 0 ? 0.05 : -0.05;
-  }
-
-  function toTrayLocal(x, y) {
-    return rotatePoint(x - CENTER.x, y - CENTER.y, -game.trayAngle);
-  }
-
-  function rotatePoint(x, y, angle) {
-    const cos = Math.cos(angle);
-    const sin = Math.sin(angle);
-    return {
-      x: x * cos - y * sin,
-      y: x * sin + y * cos,
-    };
-  }
-
-  function polar(angle, radius) {
-    return {
-      x: Math.cos(angle) * radius,
-      y: Math.sin(angle) * radius,
-    };
-  }
-
-  function angleDelta(a, b) {
-    return Math.atan2(Math.sin(a - b), Math.cos(a - b));
-  }
-
-  function normalizeAngle(angle) {
-    return Math.atan2(Math.sin(angle), Math.cos(angle));
   }
 
   function clamp(value, min, max) {
