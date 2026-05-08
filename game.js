@@ -555,7 +555,6 @@
     engine: null,
     world: null,
     trayBodies: [],
-    baffleBodies: [],
     pieces: [],
     pendingMerges: new Set(),
     powerItems: [],
@@ -791,27 +790,10 @@
       game.trayBodies.push(body);
     }
 
-    for (let i = 0; i < FOOD_KEYS.length; i += 1) {
-      const boundary = -Math.PI / 2 + (i + 0.5) * (TAU / FOOD_KEYS.length);
-      const body = Bodies.rectangle(0, 0, 122, 13, {
-        isStatic: true,
-        chamfer: { radius: 6 },
-        friction: 0.22,
-        restitution: 0.2,
-      });
-      body.plugin.local = {
-        x: Math.cos(boundary) * 130,
-        y: Math.sin(boundary) * 130,
-        angle: boundary,
-      };
-      game.trayBodies.push(body);
-      game.baffleBodies.push(body);
-    }
-
-    const centerBumper = Bodies.circle(0, 0, 35, {
+    const centerBumper = Bodies.circle(0, 0, 26, {
       isStatic: true,
       friction: 0.18,
-      restitution: 0.38,
+      restitution: 0.52,
     });
     centerBumper.plugin.local = { x: 0, y: 0, angle: 0 };
     game.trayBodies.push(centerBumper);
@@ -1117,6 +1099,8 @@
   }
 
   function pickOrderLevel() {
+    if (game.completed < 2) return 0;
+
     const maxLevel = clamp(1 + Math.floor((game.completed * meta.balance.orderDifficulty) / 3), 1, MAX_FOOD_LEVEL);
     const minLevel = maxLevel >= MAX_FOOD_LEVEL ? 2 : 1;
     return Math.floor(randomRange(minLevel, maxLevel + 1, game.orderRng));
@@ -1498,20 +1482,21 @@
 
       const local = toTrayLocal(piece.body.position.x, piece.body.position.y);
       const distance = Math.hypot(local.x, local.y);
-      if (distance < TARGET_INNER || distance > TARGET_OUTER + 52) continue;
+      if (distance < TARGET_INNER || distance > TARGET_OUTER + 100) continue;
 
       const slot = SLOTS.find((candidate) => candidate.type === piece.type);
       if (!slot) continue;
 
       const angle = Math.atan2(local.y, local.x);
-      if (Math.abs(angleDelta(angle, slot.angle)) > TARGET_WIDTH * 0.58) continue;
+      const angleGap = Math.abs(angleDelta(angle, slot.angle));
 
       const targetLocal = polar(slot.angle, 164);
       const target = rotatePoint(targetLocal.x, targetLocal.y, game.trayAngle);
       const dx = CENTER.x + target.x - piece.body.position.x;
       const dy = CENTER.y + target.y - piece.body.position.y;
       const pullDistance = Math.max(72, Math.hypot(dx, dy));
-      const strength = 0.000024 * piece.body.mass;
+      const slotScale = angleGap <= TARGET_WIDTH * 0.7 ? 1 : 0.42;
+      const strength = 0.00005 * slotScale * piece.body.mass;
 
       Body.applyForce(piece.body, piece.body.position, {
         x: (dx / pullDistance) * strength,
@@ -1682,8 +1667,8 @@
       const distance = Math.hypot(dx, dy);
       if (distance > TRAY_RADIUS + 120) {
         resetPiece(piece);
-        applyPenalty(2);
-        registerMistake();
+        game.itemMessage = "재투입";
+        game.itemMessageTimer = 0.8;
       }
     }
   }
@@ -1704,6 +1689,7 @@
           punishForbiddenPiece(piece);
         }
       } else if (slot && slot.type === piece.type && needsMore(piece.type, piece.level)) {
+        stabilizeDeliveryPiece(piece, slot, dt);
         piece.hold += dt;
         piece.wrongHold = 0;
         piece.forbiddenHold = Math.max(0, piece.forbiddenHold - dt * 1.8);
@@ -1723,6 +1709,28 @@
         piece.wrongHold = Math.max(0, piece.wrongHold - dt * 1.8);
       }
     }
+  }
+
+  function stabilizeDeliveryPiece(piece, slot, dt) {
+    const local = toTrayLocal(piece.body.position.x, piece.body.position.y);
+    const targetLocal = polar(slot.angle, clamp(Math.hypot(local.x, local.y), TARGET_INNER + 34, TARGET_OUTER - 34));
+    const target = rotatePoint(targetLocal.x, targetLocal.y, game.trayAngle);
+    const dx = CENTER.x + target.x - piece.body.position.x;
+    const dy = CENTER.y + target.y - piece.body.position.y;
+    const distance = Math.max(42, Math.hypot(dx, dy));
+    const strength = 0.00009 * piece.body.mass;
+
+    Body.applyForce(piece.body, piece.body.position, {
+      x: (dx / distance) * strength,
+      y: (dy / distance) * strength,
+    });
+
+    const damping = Math.pow(0.035, dt);
+    Body.setVelocity(piece.body, {
+      x: piece.body.velocity.x * damping,
+      y: piece.body.velocity.y * damping,
+    });
+    Body.setAngularVelocity(piece.body, piece.body.angularVelocity * damping);
   }
 
   function isForbiddenSlot(slot, piece) {
@@ -1778,7 +1786,6 @@
 
   function punishPiece(piece) {
     piece.wrongHold = 0;
-    applyPenalty(12);
     registerMistake();
     burst(piece.body.position.x, piece.body.position.y, "#2d4d46", 8);
     Body.setVelocity(piece.body, {
@@ -2901,7 +2908,7 @@
   }
 
   function getTimeCap() {
-    return GAME_SECONDS + getCharacterStats().startTime + 20;
+    return GAME_SECONDS + getCharacterStats().startTime + 10;
   }
 
   function unlockAudio() {
@@ -3209,17 +3216,17 @@
     ctx.lineCap = "round";
     for (let i = 0; i < FOOD_KEYS.length; i += 1) {
       const boundary = -Math.PI / 2 + (i + 0.5) * (TAU / FOOD_KEYS.length);
-      const start = polar(boundary, 75);
-      const end = polar(boundary, 188);
-      ctx.strokeStyle = "#244f45";
-      ctx.lineWidth = 14;
+      const start = polar(boundary, TARGET_OUTER - 42);
+      const end = polar(boundary, TARGET_OUTER - 6);
+      ctx.strokeStyle = "rgba(36, 79, 69, 0.72)";
+      ctx.lineWidth = 6;
       ctx.beginPath();
       ctx.moveTo(start.x, start.y);
       ctx.lineTo(end.x, end.y);
       ctx.stroke();
 
-      ctx.strokeStyle = "rgba(255, 255, 255, 0.28)";
-      ctx.lineWidth = 5;
+      ctx.strokeStyle = "rgba(255, 255, 255, 0.5)";
+      ctx.lineWidth = 2;
       ctx.beginPath();
       ctx.moveTo(start.x, start.y);
       ctx.lineTo(end.x, end.y);
@@ -3230,7 +3237,7 @@
     ctx.strokeStyle = "#244f45";
     ctx.lineWidth = 8;
     ctx.beginPath();
-    ctx.arc(0, 0, 36, 0, TAU);
+    ctx.arc(0, 0, 27, 0, TAU);
     ctx.fill();
     ctx.stroke();
 
