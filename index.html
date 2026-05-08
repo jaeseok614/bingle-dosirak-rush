@@ -1,0 +1,284 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>빙글도시락 러시</title>
+    <link rel="icon" href="favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <main class="app-shell" aria-label="빙글도시락 러시">
+      <header class="top-bar">
+        <div class="brand-block">
+          <span class="brand-mark" aria-hidden="true"></span>
+          <div>
+            <h1>빙글도시락 러시</h1>
+            <p>60초 도시락 물리 액션</p>
+          </div>
+        </div>
+        <div class="stats-grid" aria-label="게임 상태">
+          <div class="stat-cell">
+            <span>시간</span>
+            <strong id="timeValue">60.0</strong>
+          </div>
+          <div class="stat-cell">
+            <span>점수</span>
+            <strong id="scoreValue">0</strong>
+          </div>
+          <div class="stat-cell">
+            <span>콤보</span>
+            <strong id="comboValue">x1</strong>
+          </div>
+          <div class="stat-cell">
+            <span>완성</span>
+            <strong id="completedValue">0</strong>
+          </div>
+          <div class="stat-cell item-stat">
+            <span>아이템</span>
+            <strong id="itemValue">대기</strong>
+          </div>
+          <div class="stat-cell fever-stat">
+            <span>피버</span>
+            <strong id="feverValue">대기</strong>
+          </div>
+        </div>
+      </header>
+
+      <section class="game-layout">
+        <aside class="order-panel" aria-label="현재 주문">
+          <div id="modeBadge" class="mode-badge">일반 모드</div>
+          <div class="profile-strip" aria-label="플레이어 보유 정보">
+            <div>
+              <span>코인</span>
+              <strong id="coinValue">0</strong>
+            </div>
+            <div>
+              <span>캐릭터</span>
+              <strong id="characterValue">요리사</strong>
+            </div>
+          </div>
+          <div class="panel-title">
+            <span>현재 주문</span>
+            <strong id="orderNumber">#1</strong>
+          </div>
+          <div id="orderRule" class="order-rule" hidden></div>
+          <p class="order-hint">재료가 같은 이름 칸에 들어가면 바로 완료됩니다.</p>
+          <div id="orderList" class="order-list"></div>
+          <section class="mission-panel" aria-label="미션">
+            <div class="mission-title">
+              <span>미션</span>
+              <strong>업적 보상</strong>
+            </div>
+            <div id="missionList" class="mission-list"></div>
+          </section>
+          <div class="meter-block">
+            <div class="meter-label">
+              <span>완성도</span>
+              <strong id="orderPercent">0%</strong>
+            </div>
+            <div class="meter-track">
+              <span id="orderMeter"></span>
+            </div>
+          </div>
+        </aside>
+
+        <section class="stage-panel">
+          <canvas id="gameCanvas" width="900" height="680" aria-label="회전 도시락 게임 화면"></canvas>
+          <div class="touch-zones" aria-hidden="true">
+            <button class="touch-zone" type="button" data-dir="left" tabindex="-1" aria-label="왼쪽 터치 회전"></button>
+            <button class="touch-zone" type="button" data-dir="right" tabindex="-1" aria-label="오른쪽 터치 회전"></button>
+          </div>
+          <div id="characterHud" class="character-hud" aria-live="polite">
+            <img id="activeCharacterImage" src="assets/characters/cook.png" alt="" />
+            <div class="character-callout">
+              <strong id="activeCharacterName">도시락 요리사</strong>
+              <span id="characterBubble">준비 완료</span>
+            </div>
+          </div>
+          <div id="guideOverlay" class="guide-modal">
+            <div class="guide-box" role="dialog" aria-modal="true" aria-labelledby="guideTitle">
+              <span class="result-kicker">가이드</span>
+              <h2 id="guideTitle">돌려서 같은 칸에 넣기</h2>
+              <div class="guide-steps">
+                <div class="guide-step">
+                  <span class="guide-icon" aria-hidden="true">↺</span>
+                  <strong>도시락을 회전</strong>
+                  <p>키보드 <kbd>A</kbd>/<kbd>D</kbd>, <kbd>←</kbd>/<kbd>→</kbd> 또는 오른쪽 회전 버튼을 누릅니다.</p>
+                </div>
+                <div class="guide-step">
+                  <span class="guide-icon guide-dot" aria-hidden="true"></span>
+                  <strong>같은 이름 칸에 넣기</strong>
+                  <p>왼쪽 주문의 재료를 도시락 안의 같은 이름 칸에 굴려 넣습니다.</p>
+                </div>
+                <div class="guide-step">
+                  <span class="guide-icon guide-ring" aria-hidden="true"></span>
+                  <strong>들어가면 바로 성공</strong>
+                  <p>맞는 칸을 지나간 재료는 즉시 사라지고 점수와 콤보가 올라갑니다.</p>
+                </div>
+                <div class="guide-step">
+                  <span class="guide-icon guide-item" aria-hidden="true">★</span>
+                  <strong>아이템을 먹기</strong>
+                  <p>반짝이는 아이템에 재료가 닿으면 시간, 콤보, 자석 효과를 얻습니다.</p>
+                </div>
+                <div class="guide-step">
+                  <span class="guide-icon guide-fever" aria-hidden="true">F</span>
+                  <strong>피버를 노리기</strong>
+                  <p>콤보 x8 또는 도시락 3개 연속 완성 시 8초 동안 점수가 2배입니다.</p>
+                </div>
+                <div class="guide-step">
+                  <span class="guide-icon guide-skill" aria-hidden="true">!</span>
+                  <strong>톡 치기</strong>
+                  <p><kbd>Space</kbd> 또는 톡 치기 버튼으로 재료를 한 번 흔들 수 있습니다.</p>
+                </div>
+                <div class="guide-step">
+                  <span class="guide-icon guide-shop" aria-hidden="true">₩</span>
+                  <strong>코인과 상점</strong>
+                  <p>플레이 보상 코인으로 캐릭터와 소모 아이템을 사고 성능을 바꿀 수 있습니다.</p>
+                </div>
+              </div>
+              <p class="guide-tip">여러 재료가 같이 굴러가도 괜찮습니다. 맞는 칸을 통과한 재료부터 하나씩 빠집니다.</p>
+              <button id="startButton" class="primary-button" type="button">게임 시작</button>
+            </div>
+          </div>
+          <div id="characterSelectOverlay" class="select-modal" hidden>
+            <div class="select-box" role="dialog" aria-modal="true" aria-labelledby="selectTitle">
+              <div class="shop-head">
+                <div>
+                  <span class="result-kicker">출전 준비</span>
+                  <h2 id="selectTitle">캐릭터 선택</h2>
+                </div>
+                <strong id="selectCoinValue">0코인</strong>
+              </div>
+              <div id="startCharacterList" class="select-character-list"></div>
+              <div class="result-actions">
+                <button id="selectShopButton" class="secondary-button" type="button">상점</button>
+                <button id="startSelectedButton" class="primary-button" type="button">이 캐릭터로 시작</button>
+              </div>
+            </div>
+          </div>
+          <div id="gameOver" class="result-modal" hidden>
+            <div class="result-box" role="dialog" aria-modal="true" aria-labelledby="resultTitle">
+              <span class="result-kicker">결과</span>
+              <h2 id="resultTitle">도시락 마감</h2>
+              <dl>
+                <div>
+                  <dt>점수</dt>
+                  <dd id="finalScore">0</dd>
+                </div>
+                <div>
+                  <dt>완성</dt>
+                  <dd id="finalOrders">0</dd>
+                </div>
+                <div>
+                  <dt>최고 콤보</dt>
+                  <dd id="finalCombo">x1</dd>
+                </div>
+                <div>
+                  <dt>획득 코인</dt>
+                  <dd id="finalCoins">0</dd>
+                </div>
+              </dl>
+              <p id="dailyDelta" class="daily-delta" hidden></p>
+              <section class="breakdown-block" aria-label="점수 상세">
+                <div class="breakdown-title">점수 상세</div>
+                <div id="scoreBreakdown" class="breakdown-list"></div>
+              </section>
+              <section class="achievement-block" aria-label="새 업적">
+                <div class="breakdown-title">새 업적</div>
+                <div id="newAchievementList" class="achievement-list"></div>
+              </section>
+              <section class="leaderboard-block" aria-label="로컬 순위">
+                <div class="leaderboard-title">
+                  <span id="leaderboardTitle">로컬 TOP 5</span>
+                  <strong id="finalRank">-</strong>
+                </div>
+                <ol id="leaderboardList" class="leaderboard-list"></ol>
+              </section>
+              <p id="sharePreview" class="share-preview"></p>
+              <div class="result-actions">
+                <button id="copyResultButton" class="secondary-button" type="button">결과 복사</button>
+                <button id="playAgainButton" class="primary-button" type="button">다시 시작</button>
+              </div>
+              <p id="copyStatus" class="copy-status" aria-live="polite"></p>
+            </div>
+          </div>
+          <div id="shopOverlay" class="shop-modal" hidden>
+            <div class="shop-box" role="dialog" aria-modal="true" aria-labelledby="shopTitle">
+              <div class="shop-head">
+                <div>
+                  <span class="result-kicker">상점</span>
+                  <h2 id="shopTitle">캐릭터와 아이템</h2>
+                </div>
+                <strong id="shopCoinValue">0코인</strong>
+              </div>
+              <section class="shop-section" aria-label="캐릭터 선택">
+                <div class="shop-section-title">
+                  <span>캐릭터</span>
+                  <strong>선택 효과</strong>
+                </div>
+                <div id="characterShopList" class="shop-list"></div>
+              </section>
+              <section class="shop-section" aria-label="아이템 구매">
+                <div class="shop-section-title">
+                  <span>아이템</span>
+                  <strong>소모품</strong>
+                </div>
+                <div id="shopItemList" class="shop-list"></div>
+              </section>
+              <p id="shopStatus" class="copy-status" aria-live="polite"></p>
+              <button id="shopCloseButton" class="primary-button" type="button">닫기</button>
+            </div>
+          </div>
+          <div id="achievementOverlay" class="achievement-modal" hidden>
+            <div class="achievement-box" role="dialog" aria-modal="true" aria-labelledby="achievementTitle">
+              <div class="shop-head">
+                <div>
+                  <span class="result-kicker">컬렉션</span>
+                  <h2 id="achievementTitle">업적</h2>
+                </div>
+                <strong id="achievementSummary">0/0</strong>
+              </div>
+              <div id="achievementCollectionList" class="collection-list"></div>
+              <button id="achievementCloseButton" class="primary-button" type="button">닫기</button>
+            </div>
+          </div>
+          <div id="balanceOverlay" class="balance-modal" hidden>
+            <div class="balance-box" role="dialog" aria-modal="true" aria-labelledby="balanceTitle">
+              <div class="shop-head">
+                <div>
+                  <span class="result-kicker">튜닝</span>
+                  <h2 id="balanceTitle">밸런스 조정</h2>
+                </div>
+                <strong id="balancePresetLabel">기본</strong>
+              </div>
+              <div id="balanceControlList" class="balance-list"></div>
+              <p id="balanceStatus" class="copy-status" aria-live="polite"></p>
+              <div class="result-actions">
+                <button id="balanceResetButton" class="secondary-button" type="button">기본값</button>
+                <button id="balanceCloseButton" class="primary-button" type="button">닫기</button>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <aside class="action-panel" aria-label="조작">
+          <button class="icon-button control-button" type="button" data-dir="left" aria-label="왼쪽으로 회전">↺</button>
+          <button class="icon-button control-button" type="button" data-dir="right" aria-label="오른쪽으로 회전">↻</button>
+          <button id="skillButton" class="secondary-button skill-button" type="button">톡 치기</button>
+          <button id="modeButton" class="secondary-button mode-button" type="button">오늘 챌린지</button>
+          <button id="characterButton" class="secondary-button character-button" type="button">캐릭터</button>
+          <button id="shopButton" class="secondary-button shop-button" type="button">상점</button>
+          <button id="achievementButton" class="secondary-button achievement-button" type="button">업적</button>
+          <button id="balanceButton" class="secondary-button balance-button" type="button">튜닝</button>
+          <button id="soundButton" class="secondary-button sound-button" type="button">사운드 ON</button>
+          <button id="restartButton" class="secondary-button" type="button">재시작</button>
+          <button id="guideButton" class="secondary-button guide-button" type="button">가이드</button>
+        </aside>
+      </section>
+    </main>
+
+    <script src="vendor/matter.min.js"></script>
+    <script src="game.js"></script>
+  </body>
+</html>
