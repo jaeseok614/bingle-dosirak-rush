@@ -91,6 +91,32 @@
   const FEVER_ORDER_STREAK = 3;
   const SKILL_COOLDOWN = 8;
   const TAU = Math.PI * 2;
+  const FIT_TEXT_SELECTOR = [
+    ".stat-cell strong",
+    ".profile-strip strong",
+    "#orderNumber",
+    "#orderPercent",
+    ".order-count",
+    ".mission-row strong",
+    "#finalScore",
+    "#finalOrders",
+    "#finalCombo",
+    "#finalCoins",
+    "#finalRank",
+    "#leaderboardTitle",
+    ".leaderboard-row strong",
+    ".leaderboard-meta",
+    ".breakdown-row strong",
+    "#shopCoinValue",
+    "#selectCoinValue",
+    "#achievementSummary",
+    "#balancePresetLabel",
+    ".collection-state",
+    ".balance-value",
+    ".shop-actions button",
+    ".result-actions button",
+    ".action-panel button",
+  ].join(",");
 
   const SCORE_CATEGORIES = {
     base: "기본 점수",
@@ -562,6 +588,7 @@
     nextOrderDelay: 0,
     lastFrame: 0,
     uiTimer: 0,
+    fitTextFrame: 0,
   };
 
   if (!window.Matter) {
@@ -712,6 +739,7 @@
     ui.start.addEventListener("click", closeGuide);
     ui.playAgain.addEventListener("click", openCharacterSelect);
     ui.copyResult.addEventListener("click", copyResultText);
+    window.addEventListener("resize", scheduleFitText);
   }
 
   function buildTray() {
@@ -1821,6 +1849,7 @@
     ui.modal.hidden = true;
     renderStartCharacterSelect();
     ui.characterSelectOverlay.hidden = false;
+    scheduleFitText();
   }
 
   function renderStartCharacterSelect() {
@@ -1888,6 +1917,7 @@
     closeBalance(false);
     renderAchievementCollection();
     ui.achievementOverlay.hidden = false;
+    scheduleFitText();
   }
 
   function closeAchievements(shouldResume = true) {
@@ -1935,6 +1965,7 @@
     closeAchievements(false);
     renderBalanceControls();
     ui.balanceOverlay.hidden = false;
+    scheduleFitText();
   }
 
   function closeBalance(shouldResume = true) {
@@ -2116,6 +2147,7 @@
     ui.shopOverlay.hidden = false;
     ui.shopStatus.textContent =
       section === "characters" ? "보유 캐릭터는 바로 선택할 수 있습니다." : "아이템은 진행 중인 판에 사용할 수 있습니다.";
+    scheduleFitText();
   }
 
   function closeShop(shouldResume = true) {
@@ -2609,7 +2641,10 @@
     updateModeAndRuleUi();
     updateMetaUi();
 
-    if (!force) return;
+    if (!force) {
+      scheduleFitText();
+      return;
+    }
 
     ui.orderNumber.textContent = `#${game.orderIndex}`;
     const percent = game.targetTotal ? Math.round((game.targetDone / game.targetTotal) * 100) : 0;
@@ -2641,6 +2676,39 @@
       }),
     );
     renderMissions();
+    scheduleFitText();
+  }
+
+  function scheduleFitText() {
+    if (game.fitTextFrame) return;
+
+    game.fitTextFrame = requestAnimationFrame(() => {
+      game.fitTextFrame = 0;
+      for (const element of document.querySelectorAll(FIT_TEXT_SELECTOR)) {
+        fitTextElement(element);
+      }
+    });
+  }
+
+  function fitTextElement(element) {
+    if (!element.getClientRects().length) return;
+
+    element.style.fontSize = "";
+    const baseSize = Number.parseFloat(getComputedStyle(element).fontSize);
+    const available = element.clientWidth;
+    if (!Number.isFinite(baseSize) || baseSize <= 0 || available <= 0) return;
+
+    element.style.fontSize = `${baseSize}px`;
+    if (element.scrollWidth <= available + 1) return;
+
+    const minimumSize = element.closest(".stat-cell") ? 10 : 9;
+    let nextSize = Math.max(minimumSize, Math.floor(baseSize * (available / element.scrollWidth) * 0.96));
+    element.style.fontSize = `${nextSize}px`;
+
+    for (let i = 0; i < 4 && element.scrollWidth > available + 1 && nextSize > minimumSize; i += 1) {
+      nextSize -= 1;
+      element.style.fontSize = `${nextSize}px`;
+    }
   }
 
   function updateModeAndRuleUi() {

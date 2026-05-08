@@ -357,6 +357,116 @@ async function collectResult(client, label) {
   return result;
 }
 
+async function runTextFitStress(client, label) {
+  await evaluate(
+    client,
+    `(() => {
+      const setText = (selector, value) => {
+        const element = document.querySelector(selector);
+        if (element) element.textContent = value;
+      };
+      setText('#timeValue', '999.9');
+      setText('#scoreValue', '999,999,999,999');
+      setText('#comboValue', 'x999');
+      setText('#completedValue', '999');
+      setText('#itemValue', '자석 999초');
+      setText('#feverValue', '999초 x2');
+      setText('#coinValue', '999,999,999');
+      setText('#characterValue', '느긋한 사장님');
+      setText('#orderNumber', '#999');
+      setText('#orderPercent', '100%');
+      setText('#finalScore', '999,999,999,999');
+      setText('#finalOrders', '999');
+      setText('#finalCombo', 'x999');
+      setText('#finalCoins', '+999,999');
+      setText('#finalRank', '이번 기록 999위');
+      setText('#leaderboardTitle', '오늘 챌린지 TOP 5');
+      setText('#shopCoinValue', '999,999,999코인');
+      setText('#selectCoinValue', '999,999,999코인');
+      setText('#achievementSummary', '999/999');
+      setText('#balancePresetLabel', '커스텀');
+      for (const selector of ['#gameOver', '#shopOverlay', '#achievementOverlay', '#balanceOverlay', '#characterSelectOverlay']) {
+        const overlay = document.querySelector(selector);
+        if (overlay) overlay.hidden = false;
+      }
+      const leaderboard = document.querySelector('#leaderboardList');
+      if (leaderboard) {
+        leaderboard.innerHTML = '<li class="leaderboard-row"><span>1</span><strong>999,999,999,999</strong><span class="leaderboard-meta">999개 / x999</span></li>';
+      }
+      const breakdown = document.querySelector('#scoreBreakdown');
+      if (breakdown) {
+        breakdown.innerHTML = '<div class="breakdown-row"><span>피버 보너스</span><strong>+999,999,999</strong></div>';
+      }
+      window.dispatchEvent(new Event('resize'));
+      return true;
+    })()`,
+  );
+  await sleep(350);
+
+  return evaluate(
+    client,
+    `(() => {
+      const selector = [
+        '.stat-cell strong',
+        '.profile-strip strong',
+        '#orderNumber',
+        '#orderPercent',
+        '.order-count',
+        '.mission-row strong',
+        '#finalScore',
+        '#finalOrders',
+        '#finalCombo',
+        '#finalCoins',
+        '#finalRank',
+        '#leaderboardTitle',
+        '.leaderboard-row strong',
+        '.leaderboard-meta',
+        '.breakdown-row strong',
+        '#shopCoinValue',
+        '#selectCoinValue',
+        '#achievementSummary',
+        '#balancePresetLabel',
+        '.collection-state',
+        '.balance-value',
+        '.shop-actions button',
+        '.result-actions button',
+        '.action-panel button'
+      ].join(',');
+      const overflowing = [...document.querySelectorAll(selector)]
+        .filter((element) => element.getClientRects().length && element.scrollWidth > element.clientWidth + 1)
+        .map((element) => ({
+          text: element.textContent.trim(),
+          className: element.className,
+          id: element.id,
+          scrollWidth: element.scrollWidth,
+          clientWidth: element.clientWidth,
+          fontSize: getComputedStyle(element).fontSize
+        }));
+      return {
+        label: ${JSON.stringify(label)},
+        viewport: window.innerWidth + 'x' + window.innerHeight,
+        overflowing
+      };
+    })()`,
+  );
+}
+
+async function runLayoutOnly(client) {
+  await setDesktop(client);
+  await navigateFresh(client, `${targetUrl}?qa=layout-desktop-${Date.now()}`);
+  const desktop = await runTextFitStress(client, "desktop-layout");
+
+  await setMobile(client);
+  await navigateFresh(client, `${targetUrl}?qa=layout-mobile-${Date.now()}`);
+  const mobile = await runTextFitStress(client, "mobile-layout");
+
+  const results = [desktop, mobile];
+  console.log(JSON.stringify({ ok: results.every((result) => result.overflowing.length === 0), results }, null, 2));
+  if (results.some((result) => result.overflowing.length > 0)) {
+    process.exitCode = 1;
+  }
+}
+
 async function setDesktop(client) {
   await client.send("Emulation.clearDeviceMetricsOverride").catch(() => null);
   await client.send("Emulation.setTouchEmulationEnabled", { enabled: false }).catch(() => null);
@@ -433,6 +543,11 @@ async function main() {
     await client.send("Runtime.enable");
     await client.send("Log.enable");
     await client.send("Input.setIgnoreInputEvents", { ignore: false });
+
+    if (process.env.QA_LAYOUT_ONLY === "1") {
+      await runLayoutOnly(client);
+      return;
+    }
 
     await setDesktop(client);
     await navigateFresh(client, `${targetUrl}?qa=desktop-${Date.now()}`);
