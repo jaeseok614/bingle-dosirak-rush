@@ -145,6 +145,12 @@
   const SHOT_DIRECT_DELIVERY_MS = 2000;
   const SHOT_DIRECT_MERGE_MS = 2600;
   const SHOT_CHAIN_TARGET = 3;
+  const AMMO_STASH_SIZE = 4;
+  const PICKUP_ZONE_TOP = ARENA.bottom - 86;
+  const PICKUP_SETTLE_SECONDS = 0.52;
+  const PICKUP_MAX_SPEED = 0.62;
+  const PICKUP_GRACE_MS = 850;
+  const DELIVERY_READY_MS = 5200;
   const TAU = Math.PI * 2;
   const FIT_TEXT_SELECTOR = [
     ".stat-cell strong",
@@ -647,6 +653,7 @@
     powerItems: [],
     particles: [],
     floatingTexts: [],
+    ammoStash: [],
     score: 0,
     combo: 1,
     maxCombo: 1,
@@ -701,6 +708,7 @@
       loadedType: FOOD_KEYS[0],
       loadedLevel: 0,
       nextType: FOOD_KEYS[1],
+      nextLevel: 0,
       angle: CANNON.defaultAngle,
       power: 0.74,
       aiming: false,
@@ -1047,6 +1055,7 @@
     game.forbiddenType = "";
     game.breakdown = createBreakdown();
     game.runStats = createRunStats();
+    game.ammoStash = [];
     game.timeLeft = GAME_SECONDS + getCharacterStats().startTime;
     game.elapsed = 0;
     game.timeBonusUsed = 0;
@@ -1212,6 +1221,13 @@
   }
 
   function handleCannonPointerDown(event) {
+    const point = getCanvasPoint(event);
+    if (selectAmmoSlotAtPoint(point)) {
+      event.preventDefault();
+      unlockAudio();
+      return;
+    }
+
     if (!canUseCannon()) return;
 
     event.preventDefault();
@@ -1219,7 +1235,7 @@
     canvas.setPointerCapture?.(event.pointerId);
     game.cannon.aiming = true;
     game.cannon.pointerId = event.pointerId;
-    updateCannonAim(getCanvasPoint(event));
+    updateCannonAim(point);
   }
 
   function handleCannonPointerMove(event) {
@@ -1325,7 +1341,7 @@
     while (game.pieces.length >= MAX_PIECES) {
       const candidate = [...game.pieces]
         .filter((piece) => !piece.scored && !piece.merging)
-        .sort((a, b) => a.bornAt - b.bornAt)[0];
+        .sort((a, b) => Number(isDeliveryReadyPiece(a)) - Number(isDeliveryReadyPiece(b)) || a.bornAt - b.bornAt)[0];
       if (!candidate) return;
 
       World.remove(game.world, candidate.body);
@@ -1337,6 +1353,7 @@
     game.cannon.loadedType = "";
     game.cannon.loadedLevel = 0;
     game.cannon.nextType = "";
+    game.cannon.nextLevel = 0;
     game.cannon.reloadTimer = 0;
     game.cannon.flash = 0;
     game.cannon.shotCount = 0;
@@ -1347,16 +1364,60 @@
 
   function prepareCannonLoad(force = false) {
     if (force || !game.cannon.loadedType) {
-      game.cannon.loadedType = pickCannonType();
-      game.cannon.loadedLevel = 0;
+      setCannonAmmo(createSmartAmmo());
     }
-    game.cannon.nextType = pickCannonType();
+    setNextCannonAmmo(createSmartAmmo());
   }
 
   function advanceCannonLoad() {
-    game.cannon.loadedType = game.cannon.nextType || pickCannonType();
-    game.cannon.loadedLevel = 0;
-    game.cannon.nextType = pickCannonType();
+    const stashed = takeAutoAmmoFromStash();
+    setCannonAmmo(stashed || getNextCannonAmmo() || createSmartAmmo());
+    setNextCannonAmmo(createSmartAmmo());
+  }
+
+  function createAmmo(type, level = 0, priority = false) {
+    return {
+      type: FOODS[type] ? type : FOOD_KEYS[0],
+      level: clamp(Math.round(level), 0, MAX_FOOD_LEVEL),
+      priority,
+    };
+  }
+
+  function createSmartAmmo() {
+    return createAmmo(pickCannonType(), 0, false);
+  }
+
+  function getCurrentCannonAmmo() {
+    if (!game.cannon.loadedType) return null;
+    return createAmmo(game.cannon.loadedType, game.cannon.loadedLevel || 0, false);
+  }
+
+  function getNextCannonAmmo() {
+    if (!game.cannon.nextType) return null;
+    return createAmmo(game.cannon.nextType, game.cannon.nextLevel || 0, false);
+  }
+
+  function setCannonAmmo(ammo) {
+    game.cannon.loadedType = ammo?.type || "";
+    game.cannon.loadedLevel = ammo?.level || 0;
+  }
+
+  function setNextCannonAmmo(ammo) {
+    game.cannon.nextType = ammo?.type || "";
+    game.cannon.nextLevel = ammo?.level || 0;
+  }
+
+  function takeAutoAmmoFromStash() {
+    const usefulIndex = game.ammoStash.findIndex((ammo) => isAmmoUsefulForCurrentOrder(ammo.type, ammo.level));
+    if (usefulIndex >= 0) {
+      return game.ammoStash.splice(usefulIndex, 1)[0];
+    }
+
+    if (getRushPhase() === 0 || game.feverTimer > 0) {
+      return game.ammoStash.shift() || null;
+    }
+
+    return null;
   }
 
   function getPrimaryOrderSlot() {
@@ -1367,6 +1428,64 @@
 
     const { type } = parseOrderKey(id);
     return SLOTS.find((slot) => slot.type === type) || null;
+  }
+
+  function getAmmoSlotRects() {
+    const width = 66;
+    const height = 48;
+    const gap = 10;
+    const totalWidth = AMMO_STASH_SIZE * width + (AMMO_STASH_SIZE - 1) * gap;
+    const startX = CENTER.x - totalWidth / 2;
+    const y = ARENA.bottom + 25;
+
+    return Array.from({ length: AMMO_STASH_SIZE }, (_, index) => ({
+      index,
+      x: startX + index * (width + gap),
+      y,
+      width,
+      height,
+      centerX: startX + index * (width + gap) + width / 2,
+      centerY: y + height / 2,
+    }));
+  }
+
+  function selectAmmoSlotAtPoint(point) {
+    if (!game.started || game.timeLeft <= 0 || isBlockingOverlayOpen() || !ui.guideOverlay.hidden) return false;
+
+    const slot = getAmmoSlotRects().find((rect) => {
+      return (
+        point.x >= rect.x &&
+        point.x <= rect.x + rect.width &&
+        point.y >= rect.y &&
+        point.y <= rect.y + rect.height
+      );
+    });
+    if (!slot) return false;
+
+    return selectAmmoFromStash(slot.index);
+  }
+
+  function selectAmmoFromStash(index) {
+    const selected = game.ammoStash[index];
+    if (!selected) return true;
+
+    const current = getCurrentCannonAmmo();
+    if (current) {
+      game.ammoStash[index] = current;
+    } else {
+      game.ammoStash.splice(index, 1);
+    }
+    setCannonAmmo(selected);
+    game.cannon.reloadTimer = Math.min(game.cannon.reloadTimer, 0.08);
+    game.cannon.flash = Math.max(game.cannon.flash, 0.16);
+    game.itemMessage = `${getFoodName(selected.type, selected.level)} 장전`;
+    game.itemMessageTimer = 1.1;
+    showFloatingText("장전!", CANNON.x, CANNON.y - 88, FOODS[selected.type].color, 28);
+    setCharacterReaction("장전!", "happy", 1);
+    playSound("item");
+    vibrate(8);
+    updateUi(false);
+    return true;
   }
 
   function markFirstInput() {
@@ -1561,10 +1680,9 @@
     }
     if (game.started) {
       if (!game.cannon.loadedType || getRushPhase() === 0 || !orderHasType(game.order, game.cannon.loadedType)) {
-        game.cannon.loadedType = pickCannonType();
-        game.cannon.loadedLevel = 0;
+        setCannonAmmo(takeAutoAmmoFromStash() || createSmartAmmo());
       }
-      game.cannon.nextType = pickCannonType();
+      setNextCannonAmmo(createSmartAmmo());
     }
     updateUi(true);
   }
@@ -1749,9 +1867,11 @@
       hold: 0,
       wrongHold: 0,
       forbiddenHold: 0,
+      settleTime: 0,
       bump: 0,
       lastLaunchAt: 0,
       lastPlayerHitAt: 0,
+      deliveryReadyUntil: 0,
       shot: null,
       scored: false,
       merging: false,
@@ -1789,6 +1909,8 @@
       !b.scored &&
       !a.merging &&
       !b.merging &&
+      !isDeliveryReadyPiece(a) &&
+      !isDeliveryReadyPiece(b) &&
       a.type === b.type &&
       a.level === b.level &&
       a.level < MAX_FOOD_LEVEL &&
@@ -1931,6 +2053,11 @@
     merged.bump = 0.26;
     merged.hold = 0;
     merged.lastPlayerHitAt = Math.max(a.lastPlayerHitAt || 0, b.lastPlayerHitAt || 0);
+    if (isAmmoUsefulForCurrentOrder(type, nextLevel)) {
+      merged.deliveryReadyUntil = performance.now() + DELIVERY_READY_MS;
+      merged.bump = 0.36;
+      showFloatingText("배달 준비!", position.x, position.y - 52, "#f1c453", 28);
+    }
 
     const score = LEVEL_SCORE[nextLevel] + nextLevel * 55;
     addScore(score, "base");
@@ -2285,6 +2412,7 @@
     processMerges();
     containEscapedPieces();
     updateScoring(dt);
+    updatePickupZone(dt);
     updateIngredientSpawns(dt);
     updateItemTimers(dt);
     updateFever(dt);
@@ -2400,6 +2528,109 @@
         piece.wrongHold = Math.max(0, piece.wrongHold - dt * 1.8);
       }
     }
+  }
+
+  function updatePickupZone(dt) {
+    const now = performance.now();
+
+    for (const piece of [...game.pieces]) {
+      if (piece.scored || piece.merging) continue;
+
+      const body = piece.body;
+      const velocity = Math.hypot(body.velocity.x, body.velocity.y);
+      const inPickupZone = body.position.y >= PICKUP_ZONE_TOP;
+      const slow = velocity <= PICKUP_MAX_SPEED && Math.abs(body.angularVelocity) <= 0.22;
+      const oldEnough = now - piece.bornAt >= PICKUP_GRACE_MS;
+
+      if (inPickupZone && slow && oldEnough) {
+        piece.settleTime += dt;
+      } else {
+        piece.settleTime = 0;
+      }
+
+      if (piece.settleTime >= PICKUP_SETTLE_SECONDS) {
+        collectPieceToAmmo(piece);
+      }
+    }
+  }
+
+  function collectPieceToAmmo(piece) {
+    if (!piece || piece.scored || piece.merging) return;
+
+    const ammo = createAmmo(piece.type, piece.level, isAmmoUsefulForCurrentOrder(piece.type, piece.level));
+    World.remove(game.world, piece.body);
+    game.pieces = game.pieces.filter((candidate) => candidate !== piece);
+    addAmmoToStash(ammo);
+    burst(piece.body.position.x, piece.body.position.y, FOODS[piece.type].color, ammo.priority ? 16 : 8);
+  }
+
+  function addAmmoToStash(ammo) {
+    if (!ammo) return;
+
+    if (ammo.priority) {
+      game.ammoStash.unshift(ammo);
+      game.itemMessage = `${getFoodName(ammo.type, ammo.level)} 배달 준비`;
+      game.itemMessageTimer = 1.4;
+      showFloatingText("보관!", CANNON.x, CANNON.y - 112, FOODS[ammo.type].color, 26);
+    } else {
+      game.ammoStash.push(ammo);
+    }
+
+    trimAmmoStash();
+    promoteUsefulAmmoIfNeeded();
+    if (!game.cannon.loadedType) {
+      setCannonAmmo(takeAutoAmmoFromStash() || createSmartAmmo());
+    }
+    updateUi(false);
+  }
+
+  function promoteUsefulAmmoIfNeeded() {
+    const usefulIndex = game.ammoStash.findIndex((ammo) => isAmmoUsefulForCurrentOrder(ammo.type, ammo.level));
+    if (usefulIndex < 0) return;
+
+    const current = getCurrentCannonAmmo();
+    const currentUseful = current && isAmmoUsefulForCurrentOrder(current.type, current.level);
+    const shouldPromote = !current || !currentUseful || getRushPhase() === 0 || game.feverTimer > 0;
+    if (!shouldPromote) return;
+
+    const [selected] = game.ammoStash.splice(usefulIndex, 1);
+    if (!selected) return;
+
+    if (current) {
+      game.ammoStash.unshift(current);
+      trimAmmoStash();
+    }
+    setCannonAmmo(selected);
+    game.cannon.flash = Math.max(game.cannon.flash, 0.18);
+  }
+
+  function trimAmmoStash() {
+    while (game.ammoStash.length > AMMO_STASH_SIZE) {
+      const index = findAmmoRecycleIndex();
+      const [recycled] = game.ammoStash.splice(index, 1);
+      if (!recycled) return;
+
+      const recycleScore = 30 + recycled.level * 25;
+      addScore(recycleScore, "item");
+      game.itemMessage = `${getFoodName(recycled.type, recycled.level)} 정리 +${recycleScore}`;
+      game.itemMessageTimer = 1.2;
+    }
+  }
+
+  function findAmmoRecycleIndex() {
+    let bestIndex = game.ammoStash.length - 1;
+    let bestScore = Infinity;
+
+    game.ammoStash.forEach((ammo, index) => {
+      const usefulPenalty = isAmmoUsefulForCurrentOrder(ammo.type, ammo.level) ? 100 : 0;
+      const score = usefulPenalty + ammo.level * 8 + index * 0.01;
+      if (score < bestScore) {
+        bestScore = score;
+        bestIndex = index;
+      }
+    });
+
+    return bestIndex;
   }
 
   function stabilizeDeliveryPiece(piece, slot, dt) {
@@ -2536,6 +2767,8 @@
 
   function resetPiece(piece) {
     piece.lastPlayerHitAt = 0;
+    piece.settleTime = 0;
+    piece.deliveryReadyUntil = 0;
     Body.setPosition(piece.body, {
       x: CENTER.x + randomRange(-88, 88),
       y: ARENA.top + 218 + randomRange(-20, 20),
@@ -3700,6 +3933,20 @@
     return (game.progress?.[id] || 0) < (game.order?.[id] || 0);
   }
 
+  function isAmmoUsefulForCurrentOrder(type, level = 0) {
+    return Object.keys(game.order || {}).some((id) => {
+      const target = parseOrderKey(id);
+      return target.type === type && target.level <= level && (game.progress?.[id] || 0) < (game.order?.[id] || 0);
+    });
+  }
+
+  function isDeliveryReadyPiece(piece) {
+    return (
+      piece?.deliveryReadyUntil > performance.now() &&
+      isAmmoUsefulForCurrentOrder(piece.type, piece.level)
+    );
+  }
+
   function getDeliverableOrderId(piece) {
     if (!piece || !game.order) return "";
 
@@ -3896,6 +4143,7 @@
     drawTray();
     drawLaunchPads();
     drawCannon();
+    drawAmmoStash();
     drawPowerItems();
     drawPieces();
     drawParticles();
@@ -3971,6 +4219,8 @@
     }
     ctx.setLineDash([]);
 
+    drawPickupZone();
+
     ctx.strokeStyle = "#244f45";
     ctx.lineWidth = 10;
     roundRect(ARENA.left + 2, ARENA.top + 2, width - 4, height - 4, 20);
@@ -4026,6 +4276,20 @@
       ctx.strokeText("금지", bounds.x, slot.y + 28);
       ctx.fillText("금지", bounds.x, slot.y + 28);
     }
+    ctx.restore();
+  }
+
+  function drawPickupZone() {
+    ctx.save();
+    ctx.fillStyle = "rgba(47, 109, 91, 0.08)";
+    roundRect(ARENA.left + 30, PICKUP_ZONE_TOP, ARENA.right - ARENA.left - 60, ARENA.bottom - PICKUP_ZONE_TOP - 8, 18);
+    ctx.fill();
+    ctx.strokeStyle = "rgba(47, 109, 91, 0.18)";
+    ctx.lineWidth = 2;
+    ctx.setLineDash([8, 10]);
+    roundRect(ARENA.left + 36, PICKUP_ZONE_TOP + 6, ARENA.right - ARENA.left - 72, ARENA.bottom - PICKUP_ZONE_TOP - 20, 14);
+    ctx.stroke();
+    ctx.setLineDash([]);
     ctx.restore();
   }
 
@@ -4108,7 +4372,7 @@
       ctx.translate(-(CANNON.x + 70), -(CANNON.y + 28));
       drawIngredient({
         type: cannon.nextType,
-        level: 0,
+        level: cannon.nextLevel || 0,
         body: { position: { x: CANNON.x + 70, y: CANNON.y + 28 }, angle: 0 },
         bump: 0,
         hold: 0,
@@ -4116,6 +4380,54 @@
         wrongHold: 0,
       });
       ctx.restore();
+    }
+  }
+
+  function drawAmmoStash() {
+    const rects = getAmmoSlotRects();
+
+    for (const rect of rects) {
+      const ammo = game.ammoStash[rect.index];
+      const useful = ammo && isAmmoUsefulForCurrentOrder(ammo.type, ammo.level);
+
+      ctx.save();
+      ctx.fillStyle = useful ? "#fff8da" : "#f5f8f0";
+      ctx.strokeStyle = useful ? "#f1c453" : "rgba(24, 49, 43, 0.22)";
+      ctx.lineWidth = useful ? 4 : 2;
+      ctx.shadowColor = useful ? "rgba(241, 196, 83, 0.42)" : "rgba(24, 49, 43, 0.16)";
+      ctx.shadowBlur = useful ? 12 : 5;
+      roundRect(rect.x, rect.y, rect.width, rect.height, 12);
+      ctx.fill();
+      ctx.stroke();
+      ctx.shadowColor = "transparent";
+
+      if (!ammo) {
+        ctx.strokeStyle = "rgba(24, 49, 43, 0.18)";
+        ctx.lineWidth = 2;
+        ctx.setLineDash([5, 5]);
+        roundRect(rect.x + 10, rect.y + 10, rect.width - 20, rect.height - 20, 8);
+        ctx.stroke();
+        ctx.setLineDash([]);
+      }
+      ctx.restore();
+
+      if (ammo) {
+        ctx.save();
+        ctx.translate(rect.centerX, rect.centerY);
+        ctx.scale(0.58, 0.58);
+        ctx.translate(-rect.centerX, -rect.centerY);
+        drawIngredient({
+          type: ammo.type,
+          level: ammo.level,
+          body: { position: { x: rect.centerX, y: rect.centerY }, angle: 0 },
+          bump: 0,
+          hold: 0,
+          forbiddenHold: 0,
+          wrongHold: 0,
+          deliveryReadyUntil: useful ? performance.now() + 1 : 0,
+        });
+        ctx.restore();
+      }
     }
   }
 
@@ -4261,6 +4573,8 @@
     ctx.shadowColor = "transparent";
     if (piece.hold > 0) {
       drawHoldRing(radius + 9, piece.hold / DELIVERY_HOLD_SECONDS, "#2c9aa0");
+    } else if (isDeliveryReadyPiece(piece)) {
+      drawHoldRing(radius + 10, 1, "#f1c453");
     } else if (piece.forbiddenHold > 0) {
       drawHoldRing(radius + 9, piece.forbiddenHold / FORBIDDEN_HOLD_SECONDS, "#e85d4f");
     } else if (piece.wrongHold > 0) {

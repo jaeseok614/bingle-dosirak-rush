@@ -1400,7 +1400,7 @@ h1 {
   }
 
   .touch-zones {
-    pointer-events: auto;
+    pointer-events: none;
   }
 
   .mobile-order-hud {
