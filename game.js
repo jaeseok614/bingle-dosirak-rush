@@ -51,6 +51,7 @@
     finalRank: document.querySelector("#finalRank"),
     leaderboardTitle: document.querySelector("#leaderboardTitle"),
     leaderboard: document.querySelector("#leaderboardList"),
+    nextGoal: document.querySelector("#nextGoal"),
     sharePreview: document.querySelector("#sharePreview"),
     copyResult: document.querySelector("#copyResultButton"),
     copyStatus: document.querySelector("#copyStatus"),
@@ -1125,6 +1126,7 @@
     ui.achievementOverlay.hidden = true;
     ui.balanceOverlay.hidden = true;
     ui.copyStatus.textContent = "";
+    if (ui.nextGoal) ui.nextGoal.textContent = "";
     ui.shopStatus.textContent = "";
     updateTrayBodies();
     createOrder();
@@ -1557,6 +1559,19 @@
       game.ammoStash.splice(index, 1);
     }
     setCannonAmmo(selected, true);
+    if (isAmmoUsefulForCurrentOrder(selected.type, selected.level)) {
+      const slot = SLOTS.find((candidate) => candidate.type === selected.type);
+      if (slot) {
+        showFloatingText(
+          `${FOODS[selected.type].name} 칸에 배달!`,
+          getSlotCenterX(slot),
+          ARENA.slotTop - 36,
+          "#f1c453",
+          30,
+        );
+      }
+      setCharacterReaction(`${FOODS[selected.type].name} 칸!`, "happy", 1.4);
+    }
     if (game.tutorialActive) {
       game.running = true;
       game.lastFrame = 0;
@@ -2606,6 +2621,10 @@
     if (game.nextOrderDelay <= 0) {
       game.orderElapsed += dt;
     }
+    if (game.tutorialActive) {
+      game.timeLeft = Math.max(game.timeLeft, 20);
+      return;
+    }
     game.timeLeft -= dt;
     if (game.timeLeft <= 0) {
       endGame();
@@ -2813,12 +2832,10 @@
     World.remove(game.world, piece.body);
     game.pieces = game.pieces.filter((candidate) => candidate !== piece);
     burst(piece.body.position.x, piece.body.position.y, "rgba(107, 121, 116, 0.75)", 8);
-    const cleanupScore = useful ? 10 : 20;
-    addScore(cleanupScore, "item");
     game.itemMessage = useful ? "아깝다!" : "재료 정리";
     game.itemMessageTimer = 1;
     showFloatingText(
-      useful ? `아깝다! +${cleanupScore}` : `재료 정리 +${cleanupScore}`,
+      useful ? "아깝다!" : "재료 정리",
       piece.body.position.x,
       piece.body.position.y - 30,
       useful ? "#e85d4f" : "#6b7974",
@@ -3219,6 +3236,9 @@
     ui.finalCombo.textContent = `x${Math.max(1, game.maxCombo - 1)}`;
     ui.finalCoins.textContent = `+${game.lastCoinAward.toLocaleString("ko-KR")}`;
     ui.resultTitle.textContent = game.completed >= 8 ? "특급 도시락" : "도시락 마감";
+    if (ui.nextGoal) {
+      ui.nextGoal.textContent = getNextGoalText();
+    }
     game.lastShareText = buildShareText();
     ui.sharePreview.textContent = game.lastShareText;
     ui.copyStatus.textContent = "";
@@ -3328,6 +3348,23 @@
     const score = Math.round(game.score).toLocaleString("ko-KR");
     const combo = Math.max(1, game.maxCombo - 1);
     return `빙글도시락 러시 ${score}점 / 도시락 ${game.completed}개 / 최고 콤보 x${combo} / ${getCharacter().name} / ${modeText} / 너도 해봐!`;
+  }
+
+  function getNextGoalText() {
+    const deliveredTargets = [5, 8, 12];
+    const nextDelivered = deliveredTargets.find((target) => game.completed < target);
+    if (nextDelivered) {
+      return `다음 목표: 배달 ${nextDelivered}개까지 ${nextDelivered - game.completed}개 남음!`;
+    }
+
+    const nextFever = game.runStats.feverActivations < 2 ? 2 : 0;
+    if (nextFever) {
+      return `다음 목표: 피버 ${nextFever}회까지 ${nextFever - game.runStats.feverActivations}회 남음!`;
+    }
+
+    const bestCombo = Math.max(1, game.maxCombo - 1);
+    const nextCombo = bestCombo < 50 ? Math.ceil((bestCombo + 1) / 10) * 10 : bestCombo + 10;
+    return `다음 목표: 최고 콤보 x${nextCombo}까지 ${nextCombo - bestCombo}콤보 남음!`;
   }
 
   async function copyResultText() {
@@ -4772,6 +4809,11 @@
     const currentAmmo = getCurrentCannonAmmo();
     const isCurrentTarget =
       currentAmmo?.type === slot.type && isAmmoUsefulForCurrentOrder(currentAmmo.type, currentAmmo.level);
+    const stashTargetAge =
+      isCurrentTarget && game.cannon.loadedFromStashAt > 0
+        ? performance.now() - game.cannon.loadedFromStashAt
+        : Infinity;
+    const isFreshStashTarget = stashTargetAge < 3500;
 
     ctx.save();
     ctx.fillStyle = food.color;
@@ -4787,11 +4829,17 @@
 
     if (isCurrentTarget) {
       const pulse = 0.55 + Math.sin(performance.now() / 120) * 0.18;
-      ctx.globalAlpha = pulse;
+      ctx.globalAlpha = isFreshStashTarget ? 0.68 + Math.sin(performance.now() / 90) * 0.2 : pulse;
       ctx.strokeStyle = "#f1c453";
-      ctx.lineWidth = 9;
-      roundRect(bounds.left - 5, ARENA.slotTop - 5, width + 10, height + 10, 15);
+      ctx.lineWidth = isFreshStashTarget ? 13 : 9;
+      roundRect(bounds.left - 7, ARENA.slotTop - 7, width + 14, height + 14, 16);
       ctx.stroke();
+      if (isFreshStashTarget) {
+        ctx.globalAlpha = 0.18 + Math.sin(performance.now() / 100) * 0.06;
+        ctx.fillStyle = "#f1c453";
+        roundRect(bounds.left - 3, ARENA.slotTop - 3, width + 6, height + 6, 14);
+        ctx.fill();
+      }
       ctx.globalAlpha = 1;
     }
 
@@ -4819,8 +4867,9 @@
       ctx.fillStyle = "#18312b";
       ctx.strokeStyle = "rgba(255, 255, 255, 0.9)";
       ctx.lineWidth = 4;
-      ctx.strokeText(`${food.name} 칸!`, bounds.x, slot.y + 28);
-      ctx.fillText(`${food.name} 칸!`, bounds.x, slot.y + 28);
+      const targetText = isFreshStashTarget ? "배달!" : `${food.name} 칸!`;
+      ctx.strokeText(targetText, bounds.x, slot.y + 28);
+      ctx.fillText(targetText, bounds.x, slot.y + 28);
     }
     ctx.restore();
   }

@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>빙글도시락 러시</title>
     <link rel="icon" href="favicon.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="style.css?v=20260511-mobile" />
+    <link rel="stylesheet" href="style.css?v=20260511-final" />
   </head>
   <body>
     <main class="app-shell" aria-label="빙글도시락 러시">
@@ -133,7 +133,7 @@
                   <p>주문 재료를 같은 색 위쪽 배달칸에 잠깐 머물게 하면 완료됩니다.</p>
                 </div>
               </div>
-              <p class="guide-tip">처음이면 20초 연습 추천. 첫 발사 전까지 타이머는 멈춥니다.</p>
+              <p class="guide-tip">처음이면 연습 추천. 성공하면 60초 본 게임이 시작됩니다.</p>
               <div class="guide-actions">
                 <button id="tutorialStartButton" class="primary-button" type="button">연습하고 시작</button>
                 <button id="startButton" class="secondary-button" type="button">바로 시작</button>
@@ -194,6 +194,7 @@
                 </div>
                 <ol id="leaderboardList" class="leaderboard-list"></ol>
               </section>
+              <p id="nextGoal" class="next-goal"></p>
               <p id="sharePreview" class="share-preview"></p>
               <div class="result-actions">
                 <button id="copyResultButton" class="secondary-button" type="button">결과 복사</button>
