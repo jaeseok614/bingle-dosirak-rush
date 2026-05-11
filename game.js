@@ -546,6 +546,7 @@
     presetPower: 0.92,
     maxPower: 1,
     dragDistance: 190,
+    chargeSeconds: 0.95,
     baseSpeed: 17.8,
     reloadSeconds: 0.28,
   };
@@ -712,6 +713,8 @@
       angle: CANNON.defaultAngle,
       power: 0.74,
       aiming: false,
+      charging: false,
+      chargeTime: 0,
       pointerId: null,
       aimPoint: { x: CANNON.x, y: CANNON.y - CANNON.dragDistance * 0.74 },
       reloadTimer: 0,
@@ -1078,7 +1081,7 @@
     game.shotStreak = 0;
     game.orderStreak = 0;
     game.skillCooldown = 0;
-    game.characterMessage = shouldRun ? "드래그해서 조준" : "준비 완료";
+    game.characterMessage = shouldRun ? "꾹 눌러 힘 조절" : "준비 완료";
     game.characterMood = shouldRun ? "happy" : "idle";
     game.characterReactionTimer = shouldRun ? 1.6 : 0;
     game.newAchievements = [];
@@ -1109,7 +1112,7 @@
     resetControls();
     ui.guideOverlay.hidden = true;
     ui.characterSelectOverlay.hidden = true;
-    setCharacterReaction("드래그해서 발사", "happy", 1.6);
+    setCharacterReaction("꾹 눌러 발사", "happy", 1.6);
   }
 
   function showGuide() {
@@ -1216,8 +1219,16 @@
   function updateCannonAim(point) {
     const dx = point.x - CANNON.x;
     const dy = point.y - CANNON.y;
-    const distance = Math.max(1, Math.hypot(dx, dy));
-    setCannonAim(Math.atan2(dy, dx), distance / CANNON.dragDistance);
+    setCannonAim(Math.atan2(dy, dx), game.cannon.power);
+  }
+
+  function startCannonCharge(point) {
+    game.cannon.aiming = true;
+    game.cannon.charging = true;
+    game.cannon.chargeTime = 0;
+    const dx = point.x - CANNON.x;
+    const dy = point.y - CANNON.y;
+    setCannonAim(Math.atan2(dy, dx), CANNON.minPower);
   }
 
   function handleCannonPointerDown(event) {
@@ -1233,9 +1244,8 @@
     event.preventDefault();
     unlockAudio();
     canvas.setPointerCapture?.(event.pointerId);
-    game.cannon.aiming = true;
     game.cannon.pointerId = event.pointerId;
-    updateCannonAim(point);
+    startCannonCharge(point);
   }
 
   function handleCannonPointerMove(event) {
@@ -1251,6 +1261,7 @@
     event.preventDefault();
     updateCannonAim(getCanvasPoint(event));
     canvas.releasePointerCapture?.(event.pointerId);
+    game.cannon.charging = false;
     fireCannonFromCurrentAim();
   }
 
@@ -1258,6 +1269,8 @@
     if (event && game.cannon.pointerId !== event.pointerId) return;
 
     game.cannon.aiming = false;
+    game.cannon.charging = false;
+    game.cannon.chargeTime = 0;
     game.cannon.pointerId = null;
   }
 
@@ -1303,6 +1316,8 @@
     }
 
     game.cannon.aiming = false;
+    game.cannon.charging = false;
+    game.cannon.chargeTime = 0;
     game.cannon.pointerId = null;
     game.cannon.reloadTimer = CANNON.reloadSeconds * getRushConfig().reloadMultiplier * (game.feverTimer > 0 ? 0.62 : 1);
     game.cannon.flash = 0.28;
@@ -1358,6 +1373,8 @@
     game.cannon.flash = 0;
     game.cannon.shotCount = 0;
     game.cannon.aiming = false;
+    game.cannon.charging = false;
+    game.cannon.chargeTime = 0;
     game.cannon.pointerId = null;
     setCannonAim(CANNON.defaultAngle, 0.74);
   }
@@ -2309,6 +2326,12 @@
   function updateCannon(dt) {
     game.cannon.reloadTimer = Math.max(0, game.cannon.reloadTimer - dt);
     game.cannon.flash = Math.max(0, game.cannon.flash - dt);
+    if (game.cannon.charging && game.cannon.aiming) {
+      game.cannon.chargeTime = Math.min(CANNON.chargeSeconds, game.cannon.chargeTime + dt);
+      const progress = clamp(game.cannon.chargeTime / CANNON.chargeSeconds, 0, 1);
+      const eased = 1 - Math.pow(1 - progress, 1.7);
+      setCannonAim(game.cannon.angle, CANNON.minPower + (CANNON.maxPower - CANNON.minPower) * eased);
+    }
   }
 
   function distanceToSegment(point, start, end) {
@@ -4352,6 +4375,8 @@
     ctx.stroke();
     ctx.restore();
 
+    drawCannonPowerGauge();
+
     if (loadedType) {
       drawIngredient({
         type: loadedType,
@@ -4381,6 +4406,27 @@
       });
       ctx.restore();
     }
+  }
+
+  function drawCannonPowerGauge() {
+    const progress = clamp((game.cannon.power - CANNON.minPower) / (CANNON.maxPower - CANNON.minPower), 0, 1);
+    const width = 136;
+    const height = 13;
+    const x = CANNON.x - width / 2;
+    const y = CANNON.y + 49;
+
+    ctx.save();
+    ctx.fillStyle = "rgba(24, 49, 43, 0.28)";
+    roundRect(x, y, width, height, 7);
+    ctx.fill();
+    ctx.fillStyle = game.cannon.charging ? "#f1c453" : "#2c9aa0";
+    roundRect(x, y, Math.max(8, width * progress), height, 7);
+    ctx.fill();
+    ctx.strokeStyle = "rgba(255, 255, 255, 0.82)";
+    ctx.lineWidth = 2;
+    roundRect(x, y, width, height, 7);
+    ctx.stroke();
+    ctx.restore();
   }
 
   function drawAmmoStash() {
