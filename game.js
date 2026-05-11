@@ -1258,6 +1258,11 @@
 
   function handleCannonPointerDown(event) {
     const point = getCanvasPoint(event);
+    if (triggerStashMergeAtPoint(point)) {
+      event.preventDefault();
+      unlockAudio();
+      return;
+    }
     if (selectAmmoSlotAtPoint(point)) {
       event.preventDefault();
       unlockAudio();
@@ -1489,6 +1494,34 @@
       centerX: startX + index * (width + gap) + width / 2,
       centerY: y + height / 2,
     }));
+  }
+
+  function getStashMergeButtonRect() {
+    const slots = getAmmoSlotRects();
+    return {
+      x: CENTER.x + 34,
+      y: slots[0].y - 27,
+      width: 92,
+      height: 22,
+    };
+  }
+
+  function isPointInRect(point, rect) {
+    return (
+      point.x >= rect.x &&
+      point.x <= rect.x + rect.width &&
+      point.y >= rect.y &&
+      point.y <= rect.y + rect.height
+    );
+  }
+
+  function triggerStashMergeAtPoint(point) {
+    if (game.cannon.charging) return false;
+    if (!game.started || game.timeLeft <= 0 || isBlockingOverlayOpen() || !ui.guideOverlay.hidden) return false;
+    if (!isPointInRect(point, getStashMergeButtonRect())) return false;
+
+    mergeBestStashAmmo();
+    return true;
   }
 
   function selectAmmoSlotAtPoint(point) {
@@ -2790,6 +2823,71 @@
     const rect = getAmmoSlotRects()[0];
     showFloatingText("탭해서 장전!", rect.centerX, rect.y - 12, "#f1c453", 26);
     setCharacterReaction("보관함을 눌러 장전", "happy", 1.6);
+  }
+
+  function canMergeAmmo(a, b) {
+    return a && b && a.type === b.type && a.level === b.level && a.level < MAX_FOOD_LEVEL;
+  }
+
+  function findBestStashMerge() {
+    let best = null;
+
+    for (let i = 0; i < game.ammoStash.length; i += 1) {
+      for (let j = i + 1; j < game.ammoStash.length; j += 1) {
+        const a = game.ammoStash[i];
+        const b = game.ammoStash[j];
+        if (!canMergeAmmo(a, b)) continue;
+
+        const nextLevel = a.level + 1;
+        const useful = isAmmoUsefulForCurrentOrder(a.type, nextLevel);
+        const orderType = getNeededOrderTypes().includes(a.type);
+        const rank = (useful ? 10000 : 0) + (orderType ? 1200 : 0) + nextLevel * 120 - i * 4 - j;
+        if (!best || rank > best.rank) {
+          best = {
+            firstIndex: i,
+            secondIndex: j,
+            type: a.type,
+            level: a.level,
+            nextLevel,
+            useful,
+            rank,
+          };
+        }
+      }
+    }
+
+    return best;
+  }
+
+  function mergeBestStashAmmo() {
+    const merge = findBestStashMerge();
+    const rect = getStashMergeButtonRect();
+    const x = rect.x + rect.width / 2;
+    const y = rect.y - 12;
+
+    if (!merge) {
+      game.itemMessage = "합칠 재료 없음";
+      game.itemMessageTimer = 1.1;
+      showFloatingText("합칠 재료 없음", x, y, "#6b7974", 20);
+      setCharacterReaction("같은 재료 2개 필요", "idle", 1.2);
+      playSound("mistake");
+      return false;
+    }
+
+    game.ammoStash.splice(merge.secondIndex, 1);
+    game.ammoStash.splice(merge.firstIndex, 1);
+    const ammo = createAmmo(merge.type, merge.nextLevel, merge.useful);
+    addAmmoToStash(ammo);
+
+    const score = 150 + merge.nextLevel * 70;
+    addScore(score, "combo");
+    showShotFeedback(`보관합체! +${score}`, x, y, "#2c9aa0");
+    burst(x, rect.y + rect.height + 18, FOODS[merge.type].color, 18);
+    setCharacterReaction("보관합체!", "happy", 1.2);
+    playSound("combo");
+    vibrate([8, 14, 8]);
+    updateUi(true);
+    return true;
   }
 
   function trimAmmoStash() {
@@ -4348,6 +4446,11 @@
       return `보관함의 ${getFoodName(usefulAmmo.type, usefulAmmo.level)} 배송! 칸을 탭하세요.`;
     }
 
+    const stashMerge = findBestStashMerge();
+    if (stashMerge?.useful) {
+      return `보관함 합치기로 ${getFoodName(stashMerge.type, stashMerge.nextLevel)}을 만들 수 있어요.`;
+    }
+
     const currentAmmo = getCurrentCannonAmmo();
     if (currentAmmo && isAmmoUsefulForCurrentOrder(currentAmmo.type, currentAmmo.level)) {
       return `${getFoodName(currentAmmo.type, currentAmmo.level)}을 위 ${FOODS[currentAmmo.type].name} 칸에 배달하세요.`;
@@ -4821,23 +4924,35 @@
 
   function drawAmmoStash() {
     const rects = getAmmoSlotRects();
+    const mergeButton = getStashMergeButtonRect();
+    const canMergeStash = Boolean(findBestStashMerge());
 
     ctx.save();
     ctx.fillStyle = "#18312b";
     ctx.font = "950 15px system-ui, sans-serif";
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
-    ctx.fillText("보관함", CENTER.x - 46, rects[0].y - 16);
+    ctx.fillText("보관함", CENTER.x - 112, rects[0].y - 16);
 
     ctx.fillStyle = "rgba(44, 154, 160, 0.14)";
     ctx.strokeStyle = "rgba(44, 154, 160, 0.34)";
     ctx.lineWidth = 2;
-    roundRect(CENTER.x + 2, rects[0].y - 27, 88, 22, 11);
+    roundRect(CENTER.x - 70, rects[0].y - 27, 86, 22, 11);
     ctx.fill();
     ctx.stroke();
     ctx.fillStyle = "#1f5145";
     ctx.font = "950 12px system-ui, sans-serif";
-    ctx.fillText("탭 장전", CENTER.x + 46, rects[0].y - 16);
+    ctx.fillText("탭 장전", CENTER.x - 27, rects[0].y - 16);
+
+    ctx.fillStyle = canMergeStash ? "#2c9aa0" : "rgba(107, 121, 116, 0.18)";
+    ctx.strokeStyle = canMergeStash ? "rgba(255, 255, 255, 0.82)" : "rgba(107, 121, 116, 0.24)";
+    ctx.lineWidth = 2;
+    roundRect(mergeButton.x, mergeButton.y, mergeButton.width, mergeButton.height, 11);
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = canMergeStash ? "#ffffff" : "#6b7974";
+    ctx.font = "950 12px system-ui, sans-serif";
+    ctx.fillText("합치기", mergeButton.x + mergeButton.width / 2, mergeButton.y + mergeButton.height / 2);
     ctx.restore();
 
     for (const rect of rects) {
