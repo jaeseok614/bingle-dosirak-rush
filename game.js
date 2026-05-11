@@ -152,9 +152,10 @@
   const PICKUP_SETTLE_SECONDS = 0.52;
   const PICKUP_MAX_SPEED = 0.62;
   const PICKUP_GRACE_MS = 850;
-  const PICKUP_CLICK_MS = 5200;
+  const PICKUP_CLICK_MS = 5000;
+  const PICKUP_RELATED_MS = 7000;
   const PICKUP_IMPORTANT_MS = 9500;
-  const PICKUP_TUTORIAL_MS = 18000;
+  const PICKUP_TUTORIAL_MS = Number.POSITIVE_INFINITY;
   const PICKUP_BLINK_MS = 1800;
   const DELIVERY_READY_MS = 5200;
   const TUTORIAL_KEY = "bingle-dosirak-rush-tutorial";
@@ -1581,15 +1582,15 @@
       .filter((piece) => piece.pickupReady && !piece.scored && !piece.merging)
       .map((piece) => {
         const distance = Math.hypot(piece.body.position.x - point.x, piece.body.position.y - point.y);
-        const tapRadius = Math.max(48, piece.body.circleRadius + 30);
+        const tapRadius = Math.max(52, piece.body.circleRadius + 32);
         return { piece, distance, tapRadius };
       })
       .sort((a, b) => a.distance - b.distance);
 
     const directTarget = readyPieces.find(({ distance, tapRadius }) => distance <= tapRadius)?.piece;
     const zoneTarget =
-      point.y >= PICKUP_ZONE_TOP - 20 && point.y <= ARENA.bottom + 28
-        ? readyPieces.find(({ distance }) => distance <= 180)?.piece
+      point.y >= PICKUP_ZONE_TOP - 26 && point.y <= ARENA.bottom + 34
+        ? readyPieces.find(({ distance }) => distance <= 240)?.piece
         : null;
     const target = directTarget || zoneTarget;
 
@@ -2722,7 +2723,7 @@
           y: body.velocity.y * Math.pow(0.08, dt),
         });
         Body.setAngularVelocity(body, body.angularVelocity * Math.pow(0.04, dt));
-        if (now >= piece.pickupExpiresAt) {
+        if (Number.isFinite(piece.pickupExpiresAt) && now >= piece.pickupExpiresAt) {
           discardPickupPiece(piece);
         }
         continue;
@@ -2778,6 +2779,7 @@
     const important = isAmmoUsefulForCurrentOrder(piece.type, piece.level);
     if (game.tutorialActive && important) return PICKUP_TUTORIAL_MS;
     if (important || game.feverTimer > 0) return PICKUP_IMPORTANT_MS;
+    if (isAmmoRelatedToCurrentOrder(piece.type)) return PICKUP_RELATED_MS;
     return PICKUP_CLICK_MS;
   }
 
@@ -4272,6 +4274,13 @@
     });
   }
 
+  function isAmmoRelatedToCurrentOrder(type) {
+    return Object.keys(game.order || {}).some((id) => {
+      const target = parseOrderKey(id);
+      return target.type === type && (game.progress?.[id] || 0) < (game.order?.[id] || 0);
+    });
+  }
+
   function isDeliveryReadyPiece(piece) {
     return (
       piece?.deliveryReadyUntil > performance.now() &&
@@ -4475,7 +4484,7 @@
 
   function getOrderHintText() {
     if (!game.started) {
-      return "꾹 눌러 발사하고, 바닥 재료는 직접 탭해 보관하세요.";
+      return "꾹 눌러 발사하고, 깜빡이는 바닥 재료는 직접 탭해 보관하세요.";
     }
 
     const pickupPiece = game.pieces.find((piece) => piece.pickupReady && isAmmoUsefulForCurrentOrder(piece.type, piece.level));
@@ -4613,14 +4622,14 @@
       if (pickupPiece) {
         return {
           title: "3/5 바닥 재료 탭",
-          body: "깜빡이는 주먹밥을 탭해 보관함으로 보내세요.",
+          body: "깜빡이는 주먹밥을 탭해 보관함으로 보내세요. 연습 중에는 사라지지 않습니다.",
         };
       }
       return {
         title: hasUsefulAmmo ? "4/5 보관함 장전" : "3/5 아래 회수대",
         body: hasUsefulAmmo
           ? "노란 보관함 칸을 탭해 주먹밥을 장전하세요."
-          : "아래에서 멈춘 재료는 직접 탭해야 보관됩니다.",
+          : "아래에서 멈춘 재료는 직접 탭해야 보관됩니다. 늦게 누르면 정리됩니다.",
       };
     }
     return {
@@ -4810,8 +4819,8 @@
       ctx.fillStyle = "#18312b";
       ctx.strokeStyle = "rgba(255, 255, 255, 0.9)";
       ctx.lineWidth = 4;
-      ctx.strokeText("여기!", bounds.x, slot.y + 28);
-      ctx.fillText("여기!", bounds.x, slot.y + 28);
+      ctx.strokeText(`${food.name} 칸!`, bounds.x, slot.y + 28);
+      ctx.fillText(`${food.name} 칸!`, bounds.x, slot.y + 28);
     }
     ctx.restore();
   }
@@ -5216,8 +5225,9 @@
       drawHoldRing(radius + 9, piece.hold / getDeliveryHoldSeconds(), "#2c9aa0");
     } else if (piece.pickupReady) {
       const usefulPickup = isAmmoUsefulForCurrentOrder(piece.type, piece.level);
-      const total = Math.max(1, piece.pickupExpiresAt - piece.pickupReadyAt);
-      const progress = clamp(pickupRemaining / total, 0, 1);
+      const limitedPickup = Number.isFinite(pickupRemaining);
+      const total = limitedPickup ? Math.max(1, piece.pickupExpiresAt - piece.pickupReadyAt) : 1;
+      const progress = limitedPickup ? clamp(pickupRemaining / total, 0, 1) : 1;
       drawHoldRing(radius + 13, progress, pickupBlink ? "#e85d4f" : "#f1c453");
       ctx.save();
       ctx.rotate(-body.angle);
@@ -5228,12 +5238,12 @@
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
       const label = usefulPickup ? "배송 재료!" : "회수 가능";
-      const seconds = Math.max(1, Math.ceil(pickupRemaining / 1000));
+      const seconds = limitedPickup ? `${Math.max(1, Math.ceil(pickupRemaining / 1000))}초` : "연습";
       ctx.strokeText(label, 0, -radius - 23);
       ctx.fillText(label, 0, -radius - 23);
       ctx.font = "950 11px system-ui, sans-serif";
-      ctx.strokeText(`${seconds}초`, 0, -radius - 9);
-      ctx.fillText(`${seconds}초`, 0, -radius - 9);
+      ctx.strokeText(seconds, 0, -radius - 9);
+      ctx.fillText(seconds, 0, -radius - 9);
       ctx.restore();
     } else if (isDeliveryReadyPiece(piece)) {
       drawHoldRing(radius + 10, 1, "#f1c453");
