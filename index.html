@@ -63,7 +63,7 @@
             <strong id="orderNumber">#1</strong>
           </div>
           <div id="orderRule" class="order-rule" hidden></div>
-          <p class="order-hint">꾹 눌러 힘을 모아 쏘고, 회수된 재료는 보관함에서 다시 장전하세요.</p>
+          <p id="orderHint" class="order-hint">꾹 눌러 힘을 모아 쏘고, 회수된 재료는 보관함에서 다시 장전하세요.</p>
           <div id="orderList" class="order-list"></div>
           <section class="mission-panel" aria-label="미션">
             <div class="mission-title">
@@ -110,7 +110,7 @@
           <div id="guideOverlay" class="guide-modal">
             <div class="guide-box" role="dialog" aria-modal="true" aria-labelledby="guideTitle">
               <span class="result-kicker">60초 도시락 캐논 합체 액션</span>
-              <h2 id="guideTitle">쏘고, 모으고, 다시 배달</h2>
+              <h2 id="guideTitle">쏘고, 합치고, 다시 쏴서 배달!</h2>
               <div class="guide-steps">
                 <div class="guide-step">
                   <span class="guide-icon" aria-hidden="true">↗</span>
@@ -133,8 +133,11 @@
                   <p>주문 재료를 같은 색 위쪽 배달칸에 잠깐 머물게 하면 완료됩니다.</p>
                 </div>
               </div>
-              <p class="guide-tip">첫 발사 전까지 타이머는 멈춥니다. 막히면 보관함에서 필요한 재료를 골라 다시 쏘세요.</p>
-              <button id="startButton" class="primary-button" type="button">바로 시작</button>
+              <p class="guide-tip">처음이면 20초 연습 추천. 첫 발사 전까지 타이머는 멈춥니다.</p>
+              <div class="guide-actions">
+                <button id="tutorialStartButton" class="primary-button" type="button">연습하고 시작</button>
+                <button id="startButton" class="secondary-button" type="button">바로 시작</button>
+              </div>
             </div>
           </div>
           <div id="characterSelectOverlay" class="select-modal" hidden>
@@ -265,13 +268,10 @@
         </section>
 
         <aside class="action-panel" aria-label="조작">
-          <button class="icon-button control-button" type="button" data-dir="left" aria-label="왼쪽 보조 자동 조준 발사">↖</button>
-          <button class="icon-button control-button" type="button" data-dir="right" aria-label="오른쪽 보조 자동 조준 발사">↗</button>
           <button id="skillButton" class="secondary-button skill-button" type="button">톡 치기</button>
           <button id="restartButton" class="secondary-button" type="button">재시작</button>
           <button id="guideButton" class="secondary-button guide-button" type="button">가이드</button>
           <button id="soundButton" class="secondary-button sound-button" type="button">사운드 ON</button>
-          <button id="balanceButton" class="secondary-button balance-button" type="button">튜닝</button>
         </aside>
       </section>
     </main>

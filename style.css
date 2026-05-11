@@ -191,7 +191,7 @@ h1 {
 }
 
 .profile-strip {
-  display: grid;
+  display: none;
   grid-template-columns: 0.72fr 1.28fr;
   gap: 8px;
 }
@@ -327,7 +327,7 @@ h1 {
 }
 
 .mission-panel {
-  display: grid;
+  display: none;
   gap: 8px;
 }
 
@@ -630,6 +630,12 @@ h1 {
 .action-panel .control-button,
 .action-panel .balance-button {
   display: none;
+}
+
+.guide-actions {
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr);
+  gap: 10px;
 }
 
 .secondary-button {
@@ -1478,6 +1484,7 @@ body.is-debug .action-panel .balance-button {
     grid-template-columns: 1fr;
   }
 
+  .guide-actions,
   .result-secondary-actions {
     grid-template-columns: 1fr 1fr;
   }

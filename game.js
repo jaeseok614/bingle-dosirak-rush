@@ -23,6 +23,7 @@
     skill: document.querySelector("#skillButton"),
     orderNumber: document.querySelector("#orderNumber"),
     orderRule: document.querySelector("#orderRule"),
+    orderHint: document.querySelector("#orderHint"),
     orderList: document.querySelector("#orderList"),
     orderPercent: document.querySelector("#orderPercent"),
     orderMeter: document.querySelector("#orderMeter"),
@@ -35,6 +36,7 @@
     restart: document.querySelector("#restartButton"),
     guide: document.querySelector("#guideButton"),
     guideOverlay: document.querySelector("#guideOverlay"),
+    tutorialStart: document.querySelector("#tutorialStartButton"),
     start: document.querySelector("#startButton"),
     playAgain: document.querySelector("#playAgainButton"),
     modal: document.querySelector("#gameOver"),
@@ -158,6 +160,7 @@
     ".profile-strip strong",
     "#orderNumber",
     "#orderPercent",
+    "#orderHint",
     "#mobileOrderText",
     ".mobile-hud-meta span",
     ".order-count",
@@ -706,7 +709,9 @@
     lastCoinAward: 0,
     lastShareText: "",
     tutorialActive: false,
+    tutorialRun: false,
     tutorialStep: 0,
+    tutorialAssistTimer: 0,
     trayAngle: 0,
     trayVelocity: 0,
     cannon: {
@@ -749,7 +754,7 @@
 
   function init() {
     document.body.classList.toggle("is-debug", DEBUG_MODE);
-    if (!DEBUG_MODE) {
+    if (!DEBUG_MODE && ui.balanceButton) {
       ui.balanceButton.hidden = true;
     }
     createEngine();
@@ -805,7 +810,7 @@
       unlockAudio();
       if (!ui.guideOverlay.hidden) {
         if (event.key === "Enter" || event.key === " ") {
-          closeGuide();
+          closeGuide({ forceTutorial: true });
           event.preventDefault();
         }
         return;
@@ -891,21 +896,22 @@
     ui.characterButton.addEventListener("click", () => openShop("characters"));
     ui.shopButton.addEventListener("click", () => openShop("items"));
     ui.achievementButton.addEventListener("click", openAchievements);
-    ui.balanceButton.addEventListener("click", openBalance);
+    ui.balanceButton?.addEventListener("click", openBalance);
     ui.soundButton.addEventListener("click", toggleSound);
     ui.shopClose.addEventListener("click", closeShop);
     ui.characterShop.addEventListener("click", handleShopAction);
     ui.shopItems.addEventListener("click", handleShopAction);
     ui.selectShop.addEventListener("click", () => openShop("characters"));
     ui.startCharacterList.addEventListener("click", handleStartCharacterClick);
-    ui.startSelected.addEventListener("click", startGame);
+    ui.startSelected.addEventListener("click", () => startGame({ skipTutorial: true }));
     ui.achievementClose.addEventListener("click", closeAchievements);
     ui.balanceClose.addEventListener("click", closeBalance);
     ui.balanceReset.addEventListener("click", resetBalance);
     ui.balanceList.addEventListener("input", handleBalanceInput);
     ui.skill.addEventListener("click", useSkill);
     ui.guide.addEventListener("click", showGuide);
-    ui.start.addEventListener("click", closeGuide);
+    ui.tutorialStart?.addEventListener("click", () => closeGuide({ forceTutorial: true }));
+    ui.start.addEventListener("click", () => closeGuide({ skipTutorial: true }));
     ui.playAgain.addEventListener("click", openCharacterSelect);
     ui.copyResult.addEventListener("click", copyResultText);
     window.addEventListener("resize", scheduleFitText);
@@ -1047,7 +1053,10 @@
     game.itemRng = Math.random;
   }
 
-  function resetGame(shouldRun) {
+  function resetGame(shouldRun, options = {}) {
+    const forceTutorial = Boolean(options.forceTutorial);
+    const skipTutorial = Boolean(options.skipTutorial);
+    const tutorialRun = shouldRun && forceTutorial;
     clearIngredients();
     clearPowerItems();
     clearParticles();
@@ -1065,7 +1074,7 @@
     game.breakdown = createBreakdown();
     game.runStats = createRunStats();
     game.ammoStash = [];
-    game.timeLeft = GAME_SECONDS + getCharacterStats().startTime;
+    game.timeLeft = tutorialRun ? 20 : GAME_SECONDS + getCharacterStats().startTime;
     game.elapsed = 0;
     game.timeBonusUsed = 0;
     game.running = shouldRun;
@@ -1094,8 +1103,10 @@
     game.lastCoinAward = 0;
     game.lastShareText = "";
     game.ammoHintShown = false;
-    game.tutorialActive = shouldRun && !isTutorialComplete();
+    game.tutorialRun = tutorialRun;
+    game.tutorialActive = shouldRun && (forceTutorial || (!skipTutorial && !isTutorialComplete()));
     game.tutorialStep = 0;
+    game.tutorialAssistTimer = 0;
     game.trayAngle = 0;
     game.trayVelocity = 0;
     resetCannonLoad();
@@ -1115,9 +1126,9 @@
     updateUi(true);
   }
 
-  function startGame() {
+  function startGame(options = {}) {
     unlockAudio();
-    resetGame(true);
+    resetGame(true, options);
     resetControls();
     ui.guideOverlay.hidden = true;
     ui.characterSelectOverlay.hidden = true;
@@ -1134,15 +1145,18 @@
     resetControls();
     ui.guideOverlay.hidden = false;
     ui.start.textContent = game.started && game.timeLeft > 0 ? "계속하기" : "바로 시작";
+    if (ui.tutorialStart) {
+      ui.tutorialStart.hidden = game.started && game.timeLeft > 0;
+    }
   }
 
-  function closeGuide() {
+  function closeGuide(options = {}) {
     unlockAudio();
     ui.guideOverlay.hidden = true;
     resetControls();
 
     if (!game.started || game.timeLeft <= 0) {
-      startGame();
+      startGame(options);
       return;
     }
 
@@ -1413,6 +1427,10 @@
   }
 
   function createSmartAmmo() {
+    if (game.tutorialActive && game.completed === 0 && game.tutorialStep <= 2) {
+      return createAmmo("rice", 0, false);
+    }
+
     return createAmmo(pickCannonType(), 0, false);
   }
 
@@ -1494,6 +1512,11 @@
       game.ammoStash.splice(index, 1);
     }
     setCannonAmmo(selected, true);
+    if (game.tutorialActive) {
+      game.running = true;
+      game.lastFrame = 0;
+      game.tutorialStep = Math.max(game.tutorialStep, 3);
+    }
     game.cannon.reloadTimer = Math.min(game.cannon.reloadTimer, 0.08);
     game.cannon.flash = Math.max(game.cannon.flash, 0.16);
     game.itemMessage = `${getFoodName(selected.type, selected.level)} 장전`;
@@ -1668,12 +1691,20 @@
     game.orderRule = pickOrderRule();
     const foodPool = game.orderRule.foods || FOOD_KEYS;
 
-    for (let i = 0; i < count; i += 1) {
-      const key = foodPool[Math.floor(game.orderRng() * foodPool.length)];
-      const level = pickOrderLevel();
-      const id = orderKey(key, level);
-      order[id] = (order[id] || 0) + 1;
+    if (game.tutorialActive && game.completed === 0) {
+      const id = orderKey("rice", 1);
+      order[id] = 1;
       game.progress[id] = 0;
+      game.targetTotal = 1;
+      game.orderRule = ORDER_RULES.normal;
+    } else {
+      for (let i = 0; i < count; i += 1) {
+        const key = foodPool[Math.floor(game.orderRng() * foodPool.length)];
+        const level = pickOrderLevel();
+        const id = orderKey(key, level);
+        order[id] = (order[id] || 0) + 1;
+        game.progress[id] = 0;
+      }
     }
 
     if (game.orderRule.id === "spicy" && !orderHasType(order, "kimchi")) {
@@ -1827,6 +1858,11 @@
   }
 
   function spawnStarterIngredients() {
+    if (game.tutorialActive && game.completed === 0) {
+      spawnTutorialMergeTarget();
+      return;
+    }
+
     const starters = [];
 
     for (const id of Object.keys(game.order || {})) {
@@ -1860,6 +1896,30 @@
         },
       );
     }
+  }
+
+  function spawnTutorialMergeTarget() {
+    if (game.pieces.some((piece) => piece.type === "rice" && piece.level === 0 && !piece.scored && !piece.merging)) {
+      return;
+    }
+
+    const piece = spawnIngredient(
+      "rice",
+      0,
+      1,
+      0,
+      {
+        x: CENTER.x,
+        y: CENTER.y + 26,
+      },
+      {
+        x: 0,
+        y: 0,
+      },
+    );
+    piece.tutorialTarget = true;
+    piece.lastPlayerHitAt = performance.now();
+    Body.setAngularVelocity(piece.body, 0);
   }
 
   function spawnIngredient(type, index = 0, total = 1, level = 0, position = null, velocity = null) {
@@ -1945,7 +2005,8 @@
 
     const rvx = a.body.velocity.x - b.body.velocity.x;
     const rvy = a.body.velocity.y - b.body.velocity.y;
-    return Math.hypot(rvx, rvy) >= MERGE_MIN_RELATIVE_SPEED;
+    const threshold = game.tutorialActive && a.type === "rice" && a.level === 0 ? 0.55 : MERGE_MIN_RELATIVE_SPEED;
+    return Math.hypot(rvx, rvy) >= threshold;
   }
 
   function getBestShotPiece(...pieces) {
@@ -2266,7 +2327,9 @@
       const slotScale = piece.body.position.y < CENTER.y + 150 ? 1.35 : 0.55;
       const aimScale = xGap <= SLOT_WIDTH * 1.15 ? 1.25 : recentShot ? 0.78 : 0.48;
       const feverScale = game.feverTimer > 0 ? 1.36 : 1;
-      const strength = 0.00016 * slotScale * aimScale * getRushConfig().deliveryAssist * feverScale * piece.body.mass;
+      const tutorialScale = game.tutorialActive ? 1.8 : 1;
+      const strength =
+        0.00016 * slotScale * aimScale * getRushConfig().deliveryAssist * feverScale * tutorialScale * piece.body.mass;
 
       Body.applyForce(piece.body, piece.body.position, {
         x: (dx / pullDistance) * strength,
@@ -2441,6 +2504,7 @@
     game.trayAngle = 0;
     updateTrayBodies();
 
+    updateTutorialAssist(dt);
     applyMagnetForces();
     applyDeliveryAssist();
     Engine.update(game.engine, dt * 1000);
@@ -2547,7 +2611,7 @@
         piece.hold += dt;
         piece.wrongHold = 0;
         piece.forbiddenHold = Math.max(0, piece.forbiddenHold - dt * 1.8);
-        if (piece.hold >= DELIVERY_HOLD_SECONDS) {
+        if (piece.hold >= getDeliveryHoldSeconds()) {
           scorePiece(piece, slot, deliverableId);
         }
       } else if (slot && slot.type !== piece.type && piece.level > 0) {
@@ -2583,10 +2647,18 @@
         piece.settleTime = 0;
       }
 
-      if (piece.settleTime >= PICKUP_SETTLE_SECONDS) {
+      if (piece.settleTime >= getPickupSettleSeconds()) {
         collectPieceToAmmo(piece);
       }
     }
+  }
+
+  function getDeliveryHoldSeconds() {
+    return game.tutorialActive ? 0.08 : DELIVERY_HOLD_SECONDS;
+  }
+
+  function getPickupSettleSeconds() {
+    return game.tutorialActive ? 0.26 : PICKUP_SETTLE_SECONDS;
   }
 
   function collectPieceToAmmo(piece) {
@@ -2608,6 +2680,11 @@
       game.itemMessageTimer = 1.4;
       showFloatingText("보관!", CANNON.x, CANNON.y - 112, FOODS[ammo.type].color, 26);
       showAmmoTapHint();
+      if (game.tutorialActive && game.completed === 0) {
+        game.tutorialStep = Math.max(game.tutorialStep, 2);
+        game.running = false;
+        setCharacterReaction("배송! 칸을 탭", "happy", 1.8);
+      }
     } else {
       game.ammoStash.push(ammo);
     }
@@ -3988,8 +4065,9 @@
   function getSlotForBody(body) {
     const windowScale = getRushConfig().deliveryWindow;
     const feverScale = game.feverTimer > 0 ? 1.12 : 1;
-    const extra = body.circleRadius * 1.25 * windowScale * feverScale;
-    const xExtra = body.circleRadius * 0.95 * windowScale * feverScale;
+    const tutorialScale = game.tutorialActive ? 1.28 : 1;
+    const extra = body.circleRadius * 1.25 * windowScale * feverScale * tutorialScale;
+    const xExtra = body.circleRadius * 0.95 * windowScale * feverScale * tutorialScale;
     if (body.position.y < ARENA.slotTop - extra || body.position.y > ARENA.slotBottom + extra) return null;
 
     for (const slot of SLOTS) {
@@ -4009,6 +4087,9 @@
     ui.item.textContent = getItemStatusText();
     ui.fever.textContent = getFeverStatusText();
     ui.skill.textContent = getSkillButtonText();
+    if (ui.orderHint) {
+      ui.orderHint.textContent = getOrderHintText();
+    }
     ui.skill.disabled = game.skillCooldown > 0 || !game.started || !game.running;
     updateModeAndRuleUi();
     updateMetaUi();
@@ -4162,6 +4243,63 @@
     return "톡!";
   }
 
+  function getOrderHintText() {
+    if (!game.started) {
+      return "꾹 눌러 힘을 모아 쏘고, 회수된 재료는 보관함에서 다시 장전하세요.";
+    }
+
+    const usefulAmmo = game.ammoStash.find((ammo) => ammo && isAmmoUsefulForCurrentOrder(ammo.type, ammo.level));
+    if (usefulAmmo) {
+      return `보관함의 ${getFoodName(usefulAmmo.type, usefulAmmo.level)} 배송! 칸을 탭하세요.`;
+    }
+
+    const currentAmmo = getCurrentCannonAmmo();
+    if (currentAmmo && isAmmoUsefulForCurrentOrder(currentAmmo.type, currentAmmo.level)) {
+      return `${getFoodName(currentAmmo.type, currentAmmo.level)}을 위 ${FOODS[currentAmmo.type].name} 칸에 배달하세요.`;
+    }
+
+    const id = Object.keys(game.order || {}).find((key) => {
+      return (game.progress?.[key] || 0) < (game.order?.[key] || 0);
+    });
+    if (!id) return "다음 주문을 준비하세요.";
+
+    const { type, level } = parseOrderKey(id);
+    if (level <= 0) {
+      return `${FOODS[type].name}을 쏴서 위 ${FOODS[type].name} 칸에 넣으세요.`;
+    }
+    return `${getRecipeHint(type, level)}. 만든 뒤 보관함에서 다시 쏘세요.`;
+  }
+
+  function updateTutorialAssist(dt) {
+    if (!game.tutorialActive || game.completed > 0) return;
+
+    game.tutorialAssistTimer += dt;
+    if (game.tutorialStep <= 1) {
+      if (game.cannon.loadedType !== "rice" || game.cannon.loadedLevel !== 0) {
+        setCannonAmmo(createAmmo("rice", 0, false));
+      }
+      if (game.cannon.nextType !== "rice" || game.cannon.nextLevel !== 0) {
+        setNextCannonAmmo(createAmmo("rice", 0, false));
+      }
+      if (game.tutorialAssistTimer > 0.6) {
+        spawnTutorialMergeTarget();
+        game.tutorialAssistTimer = 0;
+      }
+    }
+
+    if (game.tutorialStep === 2) {
+      const usefulInStash = game.ammoStash.some((ammo) => ammo && isAmmoUsefulForCurrentOrder(ammo.type, ammo.level));
+      const usefulOnBoard = game.pieces.some((piece) => isAmmoUsefulForCurrentOrder(piece.type, piece.level));
+      if (!usefulInStash && !usefulOnBoard && game.tutorialAssistTimer > 1.2) {
+        setCannonAmmo(createAmmo("rice", 0, false));
+        setNextCannonAmmo(createAmmo("rice", 0, false));
+        spawnTutorialMergeTarget();
+        game.tutorialStep = 1;
+        game.tutorialAssistTimer = 0;
+      }
+    }
+  }
+
   function isTutorialComplete() {
     try {
       return window.localStorage.getItem(TUTORIAL_KEY) === "1";
@@ -4173,30 +4311,42 @@
   function markTutorialComplete() {
     if (!game.tutorialActive) return;
 
+    const shouldStartMain = game.tutorialRun;
     game.tutorialActive = false;
+    game.tutorialRun = false;
     game.tutorialStep = 4;
     try {
       window.localStorage.setItem(TUTORIAL_KEY, "1");
     } catch {
       // Tutorial progress is optional local state.
     }
-    showFloatingText("좋아요! 60초 러시 시작", CENTER.x, CENTER.y - 90, "#2c9aa0", 34);
+    if (shouldStartMain) {
+      game.running = false;
+      showFloatingText("좋아요! 본 게임 시작", CENTER.x, CENTER.y - 90, "#2c9aa0", 34);
+      window.setTimeout(() => startGame({ skipTutorial: true }), 900);
+    } else {
+      showFloatingText("좋아요! 60초 러시 시작", CENTER.x, CENTER.y - 90, "#2c9aa0", 34);
+    }
   }
 
   function updateTutorialState() {
     if (!game.tutorialActive) return;
 
+    if (game.completed > 0) {
+      markTutorialComplete();
+      return;
+    }
     if (game.tutorialStep === 0 && game.cannon.shotCount > 0) {
       game.tutorialStep = 1;
+      game.tutorialAssistTimer = 0;
     }
     if (game.tutorialStep === 1 && game.runStats.mergeCount > 0) {
       game.tutorialStep = 2;
+      game.tutorialAssistTimer = 0;
     }
     if (game.tutorialStep === 2 && game.cannon.loadedFromStashAt > 0) {
       game.tutorialStep = 3;
-    }
-    if (game.tutorialStep === 3 && game.completed > 0) {
-      markTutorialComplete();
+      game.tutorialAssistTimer = 0;
     }
   }
 
@@ -4212,7 +4362,7 @@
     if (game.tutorialStep === 1) {
       return {
         title: "2/4 같은 재료 합체",
-        body: "같은 재료를 맞추면 한 단계 커집니다.",
+        body: "밥을 밥에 맞춰 주먹밥을 만드세요.",
       };
     }
     if (game.tutorialStep === 2) {
@@ -4220,13 +4370,13 @@
       return {
         title: hasUsefulAmmo ? "3/4 배송! 칸 장전" : "3/4 아래 회수대",
         body: hasUsefulAmmo
-          ? "노란 보관함 칸을 탭하면 현재탄과 교체됩니다."
+          ? "노란 보관함 칸을 탭해 주먹밥을 장전하세요."
           : "아래에서 멈춘 재료는 보관함으로 들어갑니다.",
       };
     }
     return {
       title: "4/4 위 칸에 배달",
-      body: "현재탄과 같은 색 위쪽 배달칸을 노려 넣으세요.",
+      body: "주먹밥을 위쪽 밥 칸에 넣으면 본 게임이 시작됩니다.",
     };
   }
 
@@ -4583,7 +4733,7 @@
     ctx.stroke();
     ctx.fillStyle = "#1f5145";
     ctx.font = "950 12px system-ui, sans-serif";
-    ctx.fillText("탭=교체", CENTER.x + 46, rects[0].y - 16);
+    ctx.fillText("탭 장전", CENTER.x + 46, rects[0].y - 16);
     ctx.restore();
 
     for (const rect of rects) {
@@ -4791,7 +4941,7 @@
 
     ctx.shadowColor = "transparent";
     if (piece.hold > 0) {
-      drawHoldRing(radius + 9, piece.hold / DELIVERY_HOLD_SECONDS, "#2c9aa0");
+      drawHoldRing(radius + 9, piece.hold / getDeliveryHoldSeconds(), "#2c9aa0");
     } else if (isDeliveryReadyPiece(piece)) {
       drawHoldRing(radius + 10, 1, "#f1c453");
     } else if (piece.forbiddenHold > 0) {
