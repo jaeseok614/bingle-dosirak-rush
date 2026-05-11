@@ -113,6 +113,38 @@
   const MERGE_MIN_RELATIVE_SPEED = 1.1;
   const BOOSTER_CAPTURE_RADIUS = 78;
   const MAX_TIME_BONUS = 8;
+  const RUSH_PHASES = [
+    {
+      name: "오픈 준비",
+      smartChance: 0.85,
+      specialChance: 0,
+      deliveryAssist: 1.28,
+      deliveryWindow: 1.12,
+      reloadMultiplier: 1,
+      slotMotion: 0,
+    },
+    {
+      name: "점심 러시",
+      smartChance: 0.65,
+      specialChance: 0.28,
+      deliveryAssist: 1,
+      deliveryWindow: 1,
+      reloadMultiplier: 0.92,
+      slotMotion: 0,
+    },
+    {
+      name: "마감 러시",
+      smartChance: 0.52,
+      specialChance: 0.46,
+      deliveryAssist: 0.82,
+      deliveryWindow: 0.88,
+      reloadMultiplier: 0.82,
+      slotMotion: 16,
+    },
+  ];
+  const SHOT_DIRECT_DELIVERY_MS = 2000;
+  const SHOT_DIRECT_MERGE_MS = 2600;
+  const SHOT_CHAIN_TARGET = 3;
   const TAU = Math.PI * 2;
   const FIT_TEXT_SELECTOR = [
     ".stat-cell strong",
@@ -122,6 +154,7 @@
     "#mobileOrderText",
     ".mobile-hud-meta span",
     ".order-count",
+    ".order-recipe",
     ".mission-row strong",
     "#finalScore",
     "#finalOrders",
@@ -613,6 +646,7 @@
     pendingMerges: new Set(),
     powerItems: [],
     particles: [],
+    floatingTexts: [],
     score: 0,
     combo: 1,
     maxCombo: 1,
@@ -630,6 +664,7 @@
     breakdown: createBreakdown(),
     runStats: createRunStats(),
     timeLeft: GAME_SECONDS,
+    elapsed: 0,
     timeBonusUsed: 0,
     running: false,
     started: false,
@@ -648,6 +683,10 @@
     feverTimer: 0,
     feverComboArmed: true,
     feverParticleTimer: 0,
+    lastRushPhase: 0,
+    closingCallShown: false,
+    shotSerial: 0,
+    shotStreak: 0,
     orderStreak: 0,
     skillCooldown: 0,
     characterMessage: "준비 완료",
@@ -727,8 +766,12 @@
         const itemB = pair.bodyB.plugin?.powerItem;
         const padA = pair.bodyA.plugin?.launchPad;
         const padB = pair.bodyB.plugin?.launchPad;
+        const wallA = pair.bodyA.plugin?.wall;
+        const wallB = pair.bodyB.plugin?.wall;
         if (a) a.bump = 0.14;
         if (b) b.bump = 0.14;
+        if (a && wallB) markWallBounce(a, wallB);
+        if (b && wallA) markWallBounce(b, wallA);
         if (a && itemB) collectPowerItem(itemB);
         if (b && itemA) collectPowerItem(itemA);
         if (a && padB) triggerLaunchPad(a, padB);
@@ -878,12 +921,13 @@
       }),
     ];
 
-    for (const body of walls) {
+    for (const [index, body] of walls.entries()) {
       body.plugin.local = {
         x: body.position.x - CENTER.x,
         y: body.position.y - CENTER.y,
         angle: body.angle,
       };
+      body.plugin.wall = ["left", "right", "top", "bottom"][index];
       game.trayBodies.push(body);
     }
 
@@ -1004,6 +1048,7 @@
     game.breakdown = createBreakdown();
     game.runStats = createRunStats();
     game.timeLeft = GAME_SECONDS + getCharacterStats().startTime;
+    game.elapsed = 0;
     game.timeBonusUsed = 0;
     game.running = shouldRun;
     game.started = shouldRun;
@@ -1018,6 +1063,10 @@
     game.feverTimer = 0;
     game.feverComboArmed = true;
     game.feverParticleTimer = 0;
+    game.lastRushPhase = 0;
+    game.closingCallShown = false;
+    game.shotSerial = 0;
+    game.shotStreak = 0;
     game.orderStreak = 0;
     game.skillCooldown = 0;
     game.characterMessage = shouldRun ? "드래그해서 조준" : "준비 완료";
@@ -1204,7 +1253,7 @@
     if (slot) {
       const sideOffset = direction === "left" ? -SLOT_WIDTH * 0.18 : SLOT_WIDTH * 0.18;
       const target = {
-        x: clamp(slot.x + sideOffset, ARENA.left + 56, ARENA.right - 56),
+        x: clamp(getSlotCenterX(slot) + sideOffset, ARENA.left + 56, ARENA.right - 56),
         y: ARENA.slotBottom + 42,
       };
       setCannonAim(Math.atan2(target.y - CANNON.y, target.x - CANNON.x), CANNON.presetPower);
@@ -1218,40 +1267,58 @@
     if (!canUseCannon()) return;
 
     const now = performance.now();
-    const type = game.cannon.loadedType || pickSpawnType();
+    const type = game.cannon.loadedType || pickCannonType();
     const level = game.cannon.loadedLevel || 0;
     const speed = CANNON.baseSpeed * (0.76 + game.cannon.power * 0.46) * getCharacterStats().rotate;
+    const feverShotCount = game.feverTimer > 0 ? 2 : 1;
     trimCannonBoard();
     markFirstInput();
 
-    const piece = spawnIngredient(
-      type,
-      0,
-      1,
-      level,
-      {
-        x: CANNON.x,
-        y: CANNON.y,
-      },
-      {
-        x: Math.cos(game.cannon.angle) * speed,
-        y: Math.sin(game.cannon.angle) * speed,
-      },
-    );
-    markPlayerHit(piece, now);
-    piece.bump = 0.28;
+    for (let index = 0; index < feverShotCount; index += 1) {
+      const offset = feverShotCount === 1 ? 0 : index === 0 ? -0.075 : 0.075;
+      spawnCannonShot(
+        type,
+        level,
+        game.cannon.angle + offset,
+        speed * (index === 0 ? 1 : 0.96),
+        now,
+        feverShotCount === 1 ? -1 : index,
+      );
+    }
 
     game.cannon.aiming = false;
     game.cannon.pointerId = null;
-    game.cannon.reloadTimer = CANNON.reloadSeconds;
+    game.cannon.reloadTimer = CANNON.reloadSeconds * getRushConfig().reloadMultiplier * (game.feverTimer > 0 ? 0.62 : 1);
     game.cannon.flash = 0.28;
     game.cannon.shotCount += 1;
-    game.itemMessage = `${getFoodName(type, level)} 발사!`;
+    game.itemMessage = feverShotCount > 1 ? `${getFoodName(type, level)} 2발!` : `${getFoodName(type, level)} 발사!`;
     game.itemMessageTimer = 0.9;
-    burst(CANNON.x, CANNON.y, FOODS[type].color, 18);
+    burst(CANNON.x, CANNON.y, FOODS[type].color, feverShotCount > 1 ? 28 : 18);
     advanceCannonLoad();
     playSound("item");
     vibrate(10);
+  }
+
+  function spawnCannonShot(type, level, angle, speed, timestamp, index) {
+    const sideOffset = index < 0 ? 0 : index === 0 ? -9 : 9;
+    const piece = spawnIngredient(
+      type,
+      index,
+      1,
+      level,
+      {
+        x: CANNON.x + Math.cos(angle + Math.PI / 2) * sideOffset,
+        y: CANNON.y + Math.sin(angle + Math.PI / 2) * sideOffset,
+      },
+      {
+        x: Math.cos(angle) * speed,
+        y: Math.sin(angle) * speed,
+      },
+    );
+    attachShotMeta(piece, createShotMeta(type, level, timestamp));
+    markPlayerHit(piece, timestamp);
+    piece.bump = 0.28;
+    return piece;
   }
 
   function trimCannonBoard() {
@@ -1280,16 +1347,16 @@
 
   function prepareCannonLoad(force = false) {
     if (force || !game.cannon.loadedType) {
-      game.cannon.loadedType = pickSpawnType();
+      game.cannon.loadedType = pickCannonType();
       game.cannon.loadedLevel = 0;
     }
-    game.cannon.nextType = pickSpawnType();
+    game.cannon.nextType = pickCannonType();
   }
 
   function advanceCannonLoad() {
-    game.cannon.loadedType = game.cannon.nextType || pickSpawnType();
+    game.cannon.loadedType = game.cannon.nextType || pickCannonType();
     game.cannon.loadedLevel = 0;
-    game.cannon.nextType = pickSpawnType();
+    game.cannon.nextType = pickCannonType();
   }
 
   function getPrimaryOrderSlot() {
@@ -1314,6 +1381,37 @@
     if (piece) {
       piece.lastPlayerHitAt = timestamp;
     }
+  }
+
+  function createShotMeta(type, level, timestamp) {
+    game.shotSerial += 1;
+    return {
+      id: game.shotSerial,
+      type,
+      level,
+      firedAt: timestamp,
+      wallBounces: 0,
+      mergeAwarded: false,
+      deliveryAwarded: false,
+      bingleAwarded: false,
+      nearMissShown: false,
+    };
+  }
+
+  function attachShotMeta(piece, shot) {
+    if (!piece || !shot) return;
+    piece.shot = { ...shot };
+  }
+
+  function getActiveShot(piece) {
+    if (!piece?.shot) return null;
+    return piece.shot;
+  }
+
+  function markWallBounce(piece, wallType) {
+    const shot = getActiveShot(piece);
+    if (!shot || wallType === "bottom") return;
+    shot.wallBounces += 1;
   }
 
   function triggerLaunchPad(piece, pad) {
@@ -1369,10 +1467,56 @@
 
   function clearParticles() {
     game.particles = [];
+    game.floatingTexts = [];
+  }
+
+  function getRushPhase() {
+    if (game.completed < 2) return 0;
+    if (game.elapsed < 40 || game.completed < 6) return 1;
+    return 2;
+  }
+
+  function getRushConfig() {
+    return RUSH_PHASES[getRushPhase()] || RUSH_PHASES[0];
+  }
+
+  function getOrderCountForPhase(phase) {
+    if (phase <= 0) return 1;
+    if (phase === 1) return game.completed >= 4 ? 2 : 1;
+    return game.completed >= 8 ? 3 : 2;
+  }
+
+  function getNeededOrderTypes() {
+    return Object.keys(game.order || {})
+      .filter((id) => (game.progress?.[id] || 0) < (game.order?.[id] || 0))
+      .map((id) => parseOrderKey(id).type);
+  }
+
+  function updateRushState() {
+    const phase = getRushPhase();
+    if (phase !== game.lastRushPhase) {
+      game.lastRushPhase = phase;
+      const config = getRushConfig();
+      game.itemMessage = config.name;
+      game.itemMessageTimer = 1.6;
+      showFloatingText(config.name, CENTER.x, CENTER.y - 72, phase >= 2 ? "#e85d4f" : "#2f6d5b", 34);
+      burst(CENTER.x, CENTER.y - 20, phase >= 2 ? "#e85d4f" : "#f1c453", 20 + phase * 8);
+    }
+
+    if (!game.closingCallShown && game.timeLeft <= 10) {
+      game.closingCallShown = true;
+      game.itemMessage = "마감 10초!";
+      game.itemMessageTimer = 2;
+      showFloatingText("마감 10초!", CENTER.x, CENTER.y - 90, "#e85d4f", 40);
+      burst(CENTER.x, CENTER.y - 20, "#e85d4f", 34);
+      playSound("combo");
+      vibrate([16, 24, 16]);
+    }
   }
 
   function createOrder() {
-    const baseCount = game.completed < 5 ? 1 : 1 + Math.floor(game.completed / 6);
+    const phase = getRushPhase();
+    const baseCount = getOrderCountForPhase(phase);
     const count = clamp(Math.round(baseCount * meta.balance.orderDifficulty), 1, 3);
     const order = {};
     game.progress = {};
@@ -1416,7 +1560,11 @@
       spawnStarterIngredients();
     }
     if (game.started) {
-      prepareCannonLoad(false);
+      if (!game.cannon.loadedType || getRushPhase() === 0 || !orderHasType(game.order, game.cannon.loadedType)) {
+        game.cannon.loadedType = pickCannonType();
+        game.cannon.loadedLevel = 0;
+      }
+      game.cannon.nextType = pickCannonType();
     }
     updateUi(true);
   }
@@ -1424,8 +1572,10 @@
   function pickOrderLevel() {
     if (game.completed < 2) return 0;
 
-    const maxLevel = clamp(1 + Math.floor((game.completed * meta.balance.orderDifficulty) / 3), 1, MAX_FOOD_LEVEL);
-    const minLevel = maxLevel >= MAX_FOOD_LEVEL ? 2 : 1;
+    const phase = getRushPhase();
+    const tunedDifficulty = meta.balance.orderDifficulty;
+    const maxLevel = clamp(phase + Math.floor((game.completed * tunedDifficulty) / 8), 1, MAX_FOOD_LEVEL);
+    const minLevel = phase >= 2 ? 2 : 1;
     return Math.floor(randomRange(minLevel, maxLevel + 1, game.orderRng));
   }
 
@@ -1459,7 +1609,9 @@
 
   function pickOrderRule() {
     if (game.completed === 0) return ORDER_RULES.normal;
-    if (game.orderRng() > meta.balance.specialChance) return ORDER_RULES.normal;
+    const phaseChance = getRushConfig().specialChance;
+    const tunedChance = phaseChance * (meta.balance.specialChance / DEFAULT_BALANCE.specialChance);
+    if (game.orderRng() > clamp(tunedChance, 0, 0.75)) return ORDER_RULES.normal;
     return SPECIAL_RULES[Math.floor(game.orderRng() * SPECIAL_RULES.length)];
   }
 
@@ -1482,6 +1634,14 @@
   function getFoodShortLabel(type, level = 0) {
     const safeLevel = clamp(Math.round(level), 0, MAX_FOOD_LEVEL);
     return FOOD_SHORT_LABELS[type]?.[safeLevel] || getFoodName(type, safeLevel).slice(0, 2);
+  }
+
+  function getRecipeHint(type, level = 0) {
+    const safeLevel = clamp(Math.round(level), 0, MAX_FOOD_LEVEL);
+    if (safeLevel <= 0) return "바로 배달";
+
+    const previous = getFoodName(type, safeLevel - 1);
+    return `${previous} + ${previous} = ${getFoodName(type, safeLevel)}`;
   }
 
   function getFoodLevelConfig(type, level = 0) {
@@ -1517,6 +1677,15 @@
     }
 
     return pool[Math.floor(game.orderRng() * pool.length)] || FOOD_KEYS[0];
+  }
+
+  function pickCannonType() {
+    const neededTypes = getNeededOrderTypes();
+    if (neededTypes.length && game.orderRng() < getRushConfig().smartChance) {
+      return neededTypes[Math.floor(game.orderRng() * neededTypes.length)];
+    }
+
+    return pickSpawnType();
   }
 
   function spawnStarterIngredients() {
@@ -1583,6 +1752,7 @@
       bump: 0,
       lastLaunchAt: 0,
       lastPlayerHitAt: 0,
+      shot: null,
       scored: false,
       merging: false,
       bornAt: performance.now(),
@@ -1636,6 +1806,87 @@
     return Math.hypot(rvx, rvy) >= MERGE_MIN_RELATIVE_SPEED;
   }
 
+  function getBestShotPiece(...pieces) {
+    return pieces
+      .filter((piece) => piece?.shot)
+      .sort((a, b) => b.shot.firedAt - a.shot.firedAt)[0] || null;
+  }
+
+  function copyMergedShot(a, b, merged) {
+    const source = getBestShotPiece(a, b);
+    if (!source?.shot || !merged) return;
+    merged.shot = {
+      ...source.shot,
+      wallBounces: Math.max(a.shot?.wallBounces || 0, b.shot?.wallBounces || 0),
+    };
+  }
+
+  function awardMergeShotBonus(a, b, position, type) {
+    const source = getBestShotPiece(a, b);
+    const shot = source?.shot;
+    if (!shot) return;
+
+    const age = performance.now() - shot.firedAt;
+    if (shot.wallBounces > 0 && age <= 5200 && !shot.bingleAwarded) {
+      shot.bingleAwarded = true;
+      addScore(250, "combo");
+      showShotFeedback("빙글샷! +250", position.x, position.y - 38, "#f1c453");
+      registerShotResult(position, FOODS[type].color);
+      return;
+    }
+
+    if (age <= SHOT_DIRECT_MERGE_MS && !shot.mergeAwarded) {
+      shot.mergeAwarded = true;
+      addScore(150, "combo");
+      showShotFeedback("정조준! +150", position.x, position.y - 38, "#2c9aa0");
+      registerShotResult(position, FOODS[type].color);
+    }
+  }
+
+  function awardDeliveryShotBonus(piece, slot) {
+    const shot = getActiveShot(piece);
+    if (!shot || shot.deliveryAwarded) return;
+
+    const age = performance.now() - shot.firedAt;
+    let label = "";
+    let score = 0;
+    let color = "#f1c453";
+    if (shot.wallBounces > 0 && age <= 6200) {
+      label = "빙글배송! +500";
+      score = 500;
+      color = "#e85d4f";
+    } else if (age <= SHOT_DIRECT_DELIVERY_MS) {
+      label = "직배송! +300";
+      score = 300;
+      color = "#2c9aa0";
+    }
+
+    if (score <= 0) return;
+
+    shot.deliveryAwarded = true;
+    addScore(score, "order");
+    showShotFeedback(label, getSlotCenterX(slot), ARENA.slotTop - 18, color);
+    registerShotResult({ x: getSlotCenterX(slot), y: slot.y }, color);
+  }
+
+  function registerShotResult(position, color) {
+    game.shotStreak += 1;
+    if (game.shotStreak > 0 && game.shotStreak % SHOT_CHAIN_TARGET === 0) {
+      game.combo += 1;
+      game.maxCombo = Math.max(game.maxCombo, game.combo);
+      addScore(240, "combo");
+      showShotFeedback("연속 명중! +240", CENTER.x, CENTER.y - 34, "#f1c453");
+      burst(position.x, position.y, color, 16);
+      checkFeverTriggers();
+    }
+  }
+
+  function showShotFeedback(text, x, y, color) {
+    game.itemMessage = text.replace(/\s\+\d+$/, "");
+    game.itemMessageTimer = 1.15;
+    showFloatingText(text, x, y, color, 30);
+  }
+
   function processMerges() {
     if (!game.pendingMerges.size) return;
 
@@ -1679,6 +1930,7 @@
     const merged = spawnIngredient(type, 0, 1, nextLevel, position, velocity);
     merged.bump = 0.26;
     merged.hold = 0;
+    merged.lastPlayerHitAt = Math.max(a.lastPlayerHitAt || 0, b.lastPlayerHitAt || 0);
 
     const score = LEVEL_SCORE[nextLevel] + nextLevel * 55;
     addScore(score, "base");
@@ -1691,6 +1943,8 @@
     game.runStats.mergeCount += 1;
     game.itemMessage = `${getFoodName(type, nextLevel)} 합체!`;
     game.itemMessageTimer = 1.4;
+    awardMergeShotBonus(a, b, position, type);
+    copyMergedShot(a, b, merged);
     burst(position.x, position.y, FOODS[type].color, 22 + nextLevel * 4);
     setCharacterReaction("합체!", "happy", 1.15);
     playSound(game.combo >= 5 && game.combo % 5 === 0 ? "combo" : "success");
@@ -1848,14 +2102,15 @@
 
       if (piece.body.position.y > ARENA.bottom - 58) continue;
 
-      const dx = slot.x - piece.body.position.x;
+      const dx = getSlotCenterX(slot) - piece.body.position.x;
       const dy = slot.y - piece.body.position.y;
       const pullDistance = Math.max(72, Math.hypot(dx, dy));
-      const xGap = Math.abs(piece.body.position.x - slot.x);
+      const xGap = Math.abs(piece.body.position.x - getSlotCenterX(slot));
       const recentShot = performance.now() - (piece.lastPlayerHitAt || 0) < 3400;
       const slotScale = piece.body.position.y < CENTER.y + 150 ? 1.35 : 0.55;
       const aimScale = xGap <= SLOT_WIDTH * 1.15 ? 1.25 : recentShot ? 0.78 : 0.48;
-      const strength = 0.00016 * slotScale * aimScale * piece.body.mass;
+      const feverScale = game.feverTimer > 0 ? 1.36 : 1;
+      const strength = 0.00016 * slotScale * aimScale * getRushConfig().deliveryAssist * feverScale * piece.body.mass;
 
       Body.applyForce(piece.body, piece.body.position, {
         x: (dx / pullDistance) * strength,
@@ -1890,6 +2145,32 @@
     }
 
     return nearest && nearestDistance < 210 ? nearest.body.position : null;
+  }
+
+  function getSlotOffset(slot) {
+    const motion = getRushConfig().slotMotion;
+    if (!motion || game.feverTimer > 0 || !isSlotOrdered(slot.type)) return 0;
+    return Math.sin(game.elapsed * 2.6 + slot.index * 1.35) * motion;
+  }
+
+  function getSlotCenterX(slot) {
+    return slot.x + getSlotOffset(slot);
+  }
+
+  function getSlotBounds(slot) {
+    const offset = getSlotOffset(slot);
+    return {
+      left: slot.left + offset,
+      right: slot.right + offset,
+      x: slot.x + offset,
+    };
+  }
+
+  function isSlotOrdered(type) {
+    return Object.entries(game.order || {}).some(([id, amount]) => {
+      const parsed = parseOrderKey(id);
+      return parsed.type === type && (game.progress?.[id] || 0) < amount;
+    });
   }
 
   function updateIngredientSpawns(dt) {
@@ -1992,6 +2273,8 @@
       return;
     }
 
+    game.elapsed += dt;
+    updateRushState();
     game.trayVelocity *= Math.pow(0.35, dt * 5.8);
     game.trayAngle = 0;
     updateTrayBodies();
@@ -2087,6 +2370,7 @@
       const body = piece.body;
       const slot = getSlotForBody(body);
       const deliverableId = getDeliverableOrderId(piece);
+      checkNearMiss(piece, deliverableId);
 
       if (slot && isForbiddenSlot(slot, piece)) {
         piece.forbiddenHold += dt;
@@ -2120,7 +2404,7 @@
 
   function stabilizeDeliveryPiece(piece, slot, dt) {
     const target = {
-      x: slot.x,
+      x: getSlotCenterX(slot),
       y: clamp(piece.body.position.y, ARENA.slotTop + 26, ARENA.slotBottom - 26),
     };
     const dx = target.x - piece.body.position.x;
@@ -2139,6 +2423,22 @@
       y: piece.body.velocity.y * damping,
     });
     Body.setAngularVelocity(piece.body, piece.body.angularVelocity * damping);
+  }
+
+  function checkNearMiss(piece, deliverableId) {
+    const shot = getActiveShot(piece);
+    if (!shot || shot.nearMissShown || !deliverableId) return;
+
+    const slot = SLOTS.find((candidate) => candidate.type === piece.type);
+    if (!slot) return;
+
+    const body = piece.body;
+    const xGap = Math.abs(body.position.x - getSlotCenterX(slot));
+    const yNear = body.position.y >= ARENA.slotTop - 34 && body.position.y <= ARENA.slotBottom + 66;
+    if (!yNear || xGap > SLOT_WIDTH * 0.72 || getSlotForBody(body)) return;
+
+    shot.nearMissShown = true;
+    showFloatingText("아깝다!", body.position.x, body.position.y - 34, "#f1c453", 28);
   }
 
   function isForbiddenSlot(slot, piece) {
@@ -2164,6 +2464,11 @@
     addScore(comboBonus, "combo");
     if (game.orderRule.id === "spicy" && piece.type === "kimchi") {
       addScore(baseScore + comboBonus, "order");
+    }
+    awardDeliveryShotBonus(piece, slot);
+    if (game.timeLeft <= 10) {
+      addScore(500, "order");
+      showShotFeedback("마감배송! +500", slot ? getSlotCenterX(slot) : piece.body.position.x, ARENA.slotTop - 24, "#e85d4f");
     }
     game.combo += 1;
     game.maxCombo = Math.max(game.maxCombo, game.combo);
@@ -2219,6 +2524,7 @@
 
   function registerMistake() {
     game.combo = 1;
+    game.shotStreak = 0;
     game.orderHadWrong = true;
     game.orderStreak = 0;
     game.runStats.wrongs += 1;
@@ -3408,12 +3714,15 @@
   }
 
   function getSlotForBody(body) {
-    const extra = body.circleRadius * 1.25;
-    const xExtra = body.circleRadius * 0.95;
+    const windowScale = getRushConfig().deliveryWindow;
+    const feverScale = game.feverTimer > 0 ? 1.12 : 1;
+    const extra = body.circleRadius * 1.25 * windowScale * feverScale;
+    const xExtra = body.circleRadius * 0.95 * windowScale * feverScale;
     if (body.position.y < ARENA.slotTop - extra || body.position.y > ARENA.slotBottom + extra) return null;
 
     for (const slot of SLOTS) {
-      if (body.position.x >= slot.left - xExtra && body.position.x <= slot.right + xExtra) {
+      const bounds = getSlotBounds(slot);
+      if (body.position.x >= bounds.left - xExtra && body.position.x <= bounds.right + xExtra) {
         return slot;
       }
     }
@@ -3455,16 +3764,24 @@
         swatch.style.background = food.color;
         swatch.style.borderColor = food.edge;
 
+        const copy = document.createElement("span");
+        copy.className = "order-copy";
+
         const name = document.createElement("span");
         name.className = "order-name";
         name.textContent = getFoodName(type, level);
+
+        const recipe = document.createElement("span");
+        recipe.className = "order-recipe";
+        recipe.textContent = getRecipeHint(type, level);
+        copy.append(name, recipe);
 
         const done = game.progress?.[id] || 0;
         const count = document.createElement("span");
         count.className = "order-count";
         count.textContent = `${done}/${amount}`;
 
-        item.append(swatch, name, count);
+        item.append(swatch, copy, count);
         return item;
       }),
     );
@@ -3525,8 +3842,8 @@
   }
 
   function updateModeAndRuleUi() {
-    ui.modeBadge.textContent =
-      game.mode === "daily" ? `오늘 챌린지 ${game.dailyDate || getTodayKey()}` : "일반 모드";
+    const modeText = game.mode === "daily" ? `오늘 챌린지 ${game.dailyDate || getTodayKey()}` : "일반 모드";
+    ui.modeBadge.textContent = `${modeText} · ${getRushConfig().name}`;
     ui.modeBadge.classList.toggle("is-daily", game.mode === "daily");
     ui.modeButton.textContent = game.mode === "daily" ? "일반 모드" : "오늘 챌린지";
 
@@ -3561,7 +3878,7 @@
 
   function getFeverStatusText() {
     if (game.feverTimer > 0) {
-      return `${Math.ceil(game.feverTimer)}초 x2`;
+      return `${Math.ceil(game.feverTimer)}초 2발`;
     }
     return `x${FEVER_COMBO} 대기`;
   }
@@ -3582,6 +3899,7 @@
     drawPowerItems();
     drawPieces();
     drawParticles();
+    drawFloatingTexts();
     drawFeverOverlay();
   }
 
@@ -3615,8 +3933,8 @@
     ctx.font = "950 46px system-ui, sans-serif";
     ctx.textAlign = "center";
     ctx.textBaseline = "top";
-    ctx.strokeText("FEVER x2", WIDTH / 2, 22);
-    ctx.fillText("FEVER x2", WIDTH / 2, 22);
+    ctx.strokeText("피버 2발", WIDTH / 2, 22);
+    ctx.fillText("피버 2발", WIDTH / 2, 22);
     ctx.restore();
   }
 
@@ -3670,6 +3988,7 @@
     const food = FOODS[slot.type];
     const width = slot.right - slot.left;
     const height = ARENA.slotBottom - ARENA.slotTop;
+    const bounds = getSlotBounds(slot);
     const isOrdered = Object.entries(game.order || {}).some(([id, amount]) => {
       const { type, level } = parseOrderKey(id);
       return type === slot.type && (game.progress?.[id] || 0) < amount && needsMore(type, level);
@@ -3678,18 +3997,18 @@
     ctx.save();
     ctx.fillStyle = food.color;
     ctx.globalAlpha = isOrdered ? 0.88 : 0.62;
-    roundRect(slot.left, ARENA.slotTop, width, height, 12);
+    roundRect(bounds.left, ARENA.slotTop, width, height, 12);
     ctx.fill();
     ctx.globalAlpha = 1;
 
     ctx.strokeStyle = isOrdered ? food.edge : "rgba(36, 79, 69, 0.42)";
     ctx.lineWidth = isOrdered ? 6 : 3;
-    roundRect(slot.left, ARENA.slotTop, width, height, 12);
+    roundRect(bounds.left, ARENA.slotTop, width, height, 12);
     ctx.stroke();
 
     if (game.orderRule.id === "forbidden" && slot.type === game.forbiddenType) {
       ctx.fillStyle = "rgba(232, 93, 79, 0.32)";
-      roundRect(slot.left + 5, ARENA.slotTop + 5, width - 10, height - 10, 10);
+      roundRect(bounds.left + 5, ARENA.slotTop + 5, width - 10, height - 10, 10);
       ctx.fill();
     }
 
@@ -3699,13 +4018,13 @@
     ctx.font = "900 26px system-ui, sans-serif";
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
-    ctx.strokeText(food.name, slot.x, slot.y - 6);
-    ctx.fillText(food.name, slot.x, slot.y - 6);
+    ctx.strokeText(food.name, bounds.x, slot.y - 6);
+    ctx.fillText(food.name, bounds.x, slot.y - 6);
     if (game.orderRule.id === "forbidden" && slot.type === game.forbiddenType) {
       ctx.font = "950 19px system-ui, sans-serif";
       ctx.fillStyle = "#e85d4f";
-      ctx.strokeText("금지", slot.x, slot.y + 28);
-      ctx.fillText("금지", slot.x, slot.y + 28);
+      ctx.strokeText("금지", bounds.x, slot.y + 28);
+      ctx.fillText("금지", bounds.x, slot.y + 28);
     }
     ctx.restore();
   }
@@ -4064,6 +4383,23 @@
     }
   }
 
+  function drawFloatingTexts() {
+    for (const text of game.floatingTexts) {
+      const progress = clamp(text.life / text.maxLife, 0, 1);
+      ctx.save();
+      ctx.globalAlpha = progress;
+      ctx.fillStyle = text.color;
+      ctx.strokeStyle = "rgba(24, 49, 43, 0.72)";
+      ctx.lineWidth = 6;
+      ctx.font = `950 ${text.size}px system-ui, sans-serif`;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.strokeText(text.text, text.x, text.y);
+      ctx.fillText(text.text, text.x, text.y);
+      ctx.restore();
+    }
+  }
+
   function updateParticles(dt) {
     game.particles = game.particles.filter((particle) => {
       particle.life -= dt;
@@ -4073,6 +4409,30 @@
       particle.spin += particle.spinSpeed * dt;
       return particle.life > 0;
     });
+
+    game.floatingTexts = game.floatingTexts.filter((text) => {
+      text.life -= dt;
+      text.y += text.vy * dt;
+      text.vy *= Math.pow(0.62, dt * 8);
+      return text.life > 0;
+    });
+  }
+
+  function showFloatingText(text, x, y, color = "#ffffff", size = 30) {
+    game.floatingTexts.push({
+      text,
+      x,
+      y,
+      vy: -48,
+      color,
+      size,
+      life: 0.92,
+      maxLife: 0.92,
+    });
+
+    if (game.floatingTexts.length > 8) {
+      game.floatingTexts.splice(0, game.floatingTexts.length - 8);
+    }
   }
 
   function burst(x, y, color, count) {

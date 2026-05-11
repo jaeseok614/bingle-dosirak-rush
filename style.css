@@ -293,11 +293,27 @@ h1 {
   border: 3px solid rgba(24, 49, 43, 0.18);
 }
 
+.order-copy {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
 .order-name {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   font-weight: 900;
+}
+
+.order-recipe {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 850;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .order-count {
