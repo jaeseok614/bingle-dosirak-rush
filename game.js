@@ -152,6 +152,8 @@
   const PICKUP_SETTLE_SECONDS = 0.52;
   const PICKUP_MAX_SPEED = 0.62;
   const PICKUP_GRACE_MS = 850;
+  const PICKUP_CLICK_MS = 5200;
+  const PICKUP_BLINK_MS = 1800;
   const DELIVERY_READY_MS = 5200;
   const TUTORIAL_KEY = "bingle-dosirak-rush-tutorial";
   const TAU = Math.PI * 2;
@@ -1261,6 +1263,11 @@
       unlockAudio();
       return;
     }
+    if (collectPickupPieceAtPoint(point)) {
+      event.preventDefault();
+      unlockAudio();
+      return;
+    }
     if (game.cannon.aiming || game.cannon.charging) return;
 
     if (!canUseCannon()) return;
@@ -1526,6 +1533,25 @@
     playSound("item");
     vibrate(8);
     updateUi(false);
+    return true;
+  }
+
+  function collectPickupPieceAtPoint(point) {
+    if (game.cannon.charging) return false;
+    if (!game.started || game.timeLeft <= 0 || isBlockingOverlayOpen() || !ui.guideOverlay.hidden) return false;
+
+    const target = [...game.pieces]
+      .filter((piece) => piece.pickupReady && !piece.scored && !piece.merging)
+      .map((piece) => {
+        const distance = Math.hypot(piece.body.position.x - point.x, piece.body.position.y - point.y);
+        return { piece, distance };
+      })
+      .filter(({ piece, distance }) => distance <= piece.body.circleRadius + 24)
+      .sort((a, b) => a.distance - b.distance)[0]?.piece;
+
+    if (!target) return false;
+
+    collectPieceToAmmo(target, true);
     return true;
   }
 
@@ -1948,6 +1974,9 @@
       wrongHold: 0,
       forbiddenHold: 0,
       settleTime: 0,
+      pickupReady: false,
+      pickupReadyAt: 0,
+      pickupExpiresAt: 0,
       bump: 0,
       lastLaunchAt: 0,
       lastPlayerHitAt: 0,
@@ -1989,6 +2018,8 @@
       !b.scored &&
       !a.merging &&
       !b.merging &&
+      !a.pickupReady &&
+      !b.pickupReady &&
       !isDeliveryReadyPiece(a) &&
       !isDeliveryReadyPiece(b) &&
       a.type === b.type &&
@@ -2641,6 +2672,18 @@
       const slow = velocity <= PICKUP_MAX_SPEED && Math.abs(body.angularVelocity) <= 0.22;
       const oldEnough = now - piece.bornAt >= PICKUP_GRACE_MS;
 
+      if (piece.pickupReady) {
+        Body.setVelocity(body, {
+          x: body.velocity.x * Math.pow(0.08, dt),
+          y: body.velocity.y * Math.pow(0.08, dt),
+        });
+        Body.setAngularVelocity(body, body.angularVelocity * Math.pow(0.04, dt));
+        if (now >= piece.pickupExpiresAt) {
+          discardPickupPiece(piece);
+        }
+        continue;
+      }
+
       if (inPickupZone && slow && oldEnough) {
         piece.settleTime += dt;
       } else {
@@ -2648,7 +2691,7 @@
       }
 
       if (piece.settleTime >= getPickupSettleSeconds()) {
-        collectPieceToAmmo(piece);
+        markPiecePickupReady(piece);
       }
     }
   }
@@ -2661,7 +2704,26 @@
     return game.tutorialActive ? 0.26 : PICKUP_SETTLE_SECONDS;
   }
 
-  function collectPieceToAmmo(piece) {
+  function markPiecePickupReady(piece) {
+    if (!piece || piece.pickupReady || piece.scored || piece.merging) return;
+
+    const now = performance.now();
+    piece.pickupReady = true;
+    piece.pickupReadyAt = now;
+    piece.pickupExpiresAt = now + (game.tutorialActive ? PICKUP_CLICK_MS * 2.2 : PICKUP_CLICK_MS);
+    piece.settleTime = 0;
+    Body.setVelocity(piece.body, { x: 0, y: 0 });
+    Body.setAngularVelocity(piece.body, 0);
+    piece.bump = Math.max(piece.bump, 0.16);
+
+    showFloatingText("탭!", piece.body.position.x, piece.body.position.y - 38, FOODS[piece.type].color, 24);
+    if (game.tutorialActive && game.completed === 0 && isAmmoUsefulForCurrentOrder(piece.type, piece.level)) {
+      game.tutorialStep = Math.max(game.tutorialStep, 2);
+      setCharacterReaction("바닥 재료를 탭", "happy", 1.8);
+    }
+  }
+
+  function collectPieceToAmmo(piece, clicked = false) {
     if (!piece || piece.scored || piece.merging) return;
 
     const ammo = createAmmo(piece.type, piece.level, isAmmoUsefulForCurrentOrder(piece.type, piece.level));
@@ -2669,6 +2731,31 @@
     game.pieces = game.pieces.filter((candidate) => candidate !== piece);
     addAmmoToStash(ammo);
     burst(piece.body.position.x, piece.body.position.y, FOODS[piece.type].color, ammo.priority ? 16 : 8);
+    if (clicked) {
+      showFloatingText("보관함으로!", CANNON.x, CANNON.y - 116, FOODS[piece.type].color, 24);
+    }
+  }
+
+  function discardPickupPiece(piece) {
+    if (!piece || piece.scored || piece.merging) return;
+
+    const useful = isAmmoUsefulForCurrentOrder(piece.type, piece.level);
+    World.remove(game.world, piece.body);
+    game.pieces = game.pieces.filter((candidate) => candidate !== piece);
+    burst(piece.body.position.x, piece.body.position.y, "rgba(107, 121, 116, 0.75)", 8);
+    if (useful) {
+      game.itemMessage = `${getFoodName(piece.type, piece.level)} 사라짐`;
+      game.itemMessageTimer = 1;
+    }
+    if (game.tutorialActive && game.completed === 0 && useful) {
+      game.tutorialStep = 1;
+      game.running = true;
+      game.lastFrame = 0;
+      setCannonAmmo(createAmmo("rice", 0, false));
+      setNextCannonAmmo(createAmmo("rice", 0, false));
+      spawnTutorialMergeTarget();
+      setCharacterReaction("다시 만들어 보세요", "mistake", 1.6);
+    }
   }
 
   function addAmmoToStash(ammo) {
@@ -2870,6 +2957,9 @@
   function resetPiece(piece) {
     piece.lastPlayerHitAt = 0;
     piece.settleTime = 0;
+    piece.pickupReady = false;
+    piece.pickupReadyAt = 0;
+    piece.pickupExpiresAt = 0;
     piece.deliveryReadyUntil = 0;
     Body.setPosition(piece.body, {
       x: CENTER.x + randomRange(-88, 88),
@@ -4245,7 +4335,12 @@
 
   function getOrderHintText() {
     if (!game.started) {
-      return "꾹 눌러 힘을 모아 쏘고, 회수된 재료는 보관함에서 다시 장전하세요.";
+      return "꾹 눌러 발사하고, 바닥 재료는 직접 탭해 보관하세요.";
+    }
+
+    const pickupPiece = game.pieces.find((piece) => piece.pickupReady && isAmmoUsefulForCurrentOrder(piece.type, piece.level));
+    if (pickupPiece) {
+      return `바닥의 ${getFoodName(pickupPiece.type, pickupPiece.level)}를 탭해 보관함으로 보내세요.`;
     }
 
     const usefulAmmo = game.ammoStash.find((ammo) => ammo && isAmmoUsefulForCurrentOrder(ammo.type, ammo.level));
@@ -4267,7 +4362,7 @@
     if (level <= 0) {
       return `${FOODS[type].name}을 쏴서 위 ${FOODS[type].name} 칸에 넣으세요.`;
     }
-    return `${getRecipeHint(type, level)}. 만든 뒤 보관함에서 다시 쏘세요.`;
+    return `${getRecipeHint(type, level)}. 만든 뒤 바닥에서 탭해 보관하세요.`;
   }
 
   function updateTutorialAssist(dt) {
@@ -4355,27 +4450,36 @@
 
     if (game.tutorialStep === 0) {
       return {
-        title: "1/4 꾹 눌러 발사",
+        title: "1/5 꾹 눌러 발사",
         body: "화면을 누르면 힘 게이지가 찹니다. 방향을 맞추고 손을 떼세요.",
       };
     }
     if (game.tutorialStep === 1) {
       return {
-        title: "2/4 같은 재료 합체",
+        title: "2/5 같은 재료 합체",
         body: "밥을 밥에 맞춰 주먹밥을 만드세요.",
       };
     }
     if (game.tutorialStep === 2) {
       const hasUsefulAmmo = game.ammoStash.some((ammo) => ammo && isAmmoUsefulForCurrentOrder(ammo.type, ammo.level));
+      const pickupPiece = game.pieces.find(
+        (piece) => piece.pickupReady && isAmmoUsefulForCurrentOrder(piece.type, piece.level),
+      );
+      if (pickupPiece) {
+        return {
+          title: "3/5 바닥 재료 탭",
+          body: "깜빡이는 주먹밥을 탭해 보관함으로 보내세요.",
+        };
+      }
       return {
-        title: hasUsefulAmmo ? "3/4 배송! 칸 장전" : "3/4 아래 회수대",
+        title: hasUsefulAmmo ? "4/5 보관함 장전" : "3/5 아래 회수대",
         body: hasUsefulAmmo
           ? "노란 보관함 칸을 탭해 주먹밥을 장전하세요."
-          : "아래에서 멈춘 재료는 보관함으로 들어갑니다.",
+          : "아래에서 멈춘 재료는 직접 탭해야 보관됩니다.",
       };
     }
     return {
-      title: "4/4 위 칸에 배달",
+      title: "5/5 위 칸에 배달",
       body: "주먹밥을 위쪽 밥 칸에 넣으면 본 게임이 시작됩니다.",
     };
   }
@@ -4913,8 +5017,14 @@
     const food = getFoodLevelConfig(piece.type, piece.level);
     const radius = food.radius;
     const lift = piece.bump > 0 ? piece.bump * 18 : 0;
+    const now = performance.now();
+    const pickupRemaining = piece.pickupReady ? piece.pickupExpiresAt - now : Infinity;
+    const pickupBlink = piece.pickupReady && pickupRemaining <= PICKUP_BLINK_MS;
 
     ctx.save();
+    if (pickupBlink) {
+      ctx.globalAlpha = 0.34 + (Math.sin(now / 72) > 0 ? 0.66 : 0.18);
+    }
     ctx.translate(body.position.x, body.position.y - lift);
     ctx.rotate(body.angle);
 
@@ -4942,6 +5052,16 @@
     ctx.shadowColor = "transparent";
     if (piece.hold > 0) {
       drawHoldRing(radius + 9, piece.hold / getDeliveryHoldSeconds(), "#2c9aa0");
+    } else if (piece.pickupReady) {
+      const total = Math.max(1, piece.pickupExpiresAt - piece.pickupReadyAt);
+      const progress = clamp(pickupRemaining / total, 0, 1);
+      drawHoldRing(radius + 13, progress, pickupBlink ? "#e85d4f" : "#f1c453");
+      ctx.fillStyle = pickupBlink ? "#e85d4f" : "#18312b";
+      ctx.strokeStyle = "rgba(255, 255, 255, 0.9)";
+      ctx.lineWidth = 4;
+      ctx.font = "950 13px system-ui, sans-serif";
+      ctx.strokeText("탭", 0, -radius - 17);
+      ctx.fillText("탭", 0, -radius - 17);
     } else if (isDeliveryReadyPiece(piece)) {
       drawHoldRing(radius + 10, 1, "#f1c453");
     } else if (piece.forbiddenHold > 0) {
