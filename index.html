@@ -63,7 +63,7 @@
             <strong id="orderNumber">#1</strong>
           </div>
           <div id="orderRule" class="order-rule" hidden></div>
-          <p class="order-hint">아래 캐논에서 재료를 쏘아 합치고 주문 음식을 위쪽 배달칸에 잠깐 머물게 하세요.</p>
+          <p class="order-hint">꾹 눌러 힘을 모아 쏘고, 회수된 재료는 보관함에서 다시 장전하세요.</p>
           <div id="orderList" class="order-list"></div>
           <section class="mission-panel" aria-label="미션">
             <div class="mission-title">
@@ -110,25 +110,30 @@
           <div id="guideOverlay" class="guide-modal">
             <div class="guide-box" role="dialog" aria-modal="true" aria-labelledby="guideTitle">
               <span class="result-kicker">60초 도시락 합체 액션</span>
-              <h2 id="guideTitle">조준하고 합쳐서 배달</h2>
+              <h2 id="guideTitle">쏘고, 모으고, 다시 배달</h2>
               <div class="guide-steps">
                 <div class="guide-step">
                   <span class="guide-icon" aria-hidden="true">↗</span>
-                  <strong>조준 발사</strong>
-                  <p>화면을 누른 채 방향을 맞추고, 게이지가 찬 순간 손을 떼어 재료를 쏩니다.</p>
+                  <strong>꾹 눌러 발사</strong>
+                  <p>화면을 누르면 힘 게이지가 찹니다. 방향을 맞추고 손을 떼면 쏩니다.</p>
                 </div>
                 <div class="guide-step">
                   <span class="guide-icon guide-dot" aria-hidden="true"></span>
-                  <strong>합체하기</strong>
-                  <p>발사한 재료가 같은 음식과 부딪히면 커집니다. 화살표 부스터는 잠깐 나타납니다.</p>
+                  <strong>같은 재료 합체</strong>
+                  <p>같은 재료끼리 부딪히면 한 단계 커집니다. 주문 재료를 만들어 보세요.</p>
+                </div>
+                <div class="guide-step">
+                  <span class="guide-icon guide-item" aria-hidden="true">▣</span>
+                  <strong>회수 후 장전</strong>
+                  <p>아래 회수대에 멈춘 재료는 보관함으로 들어갑니다. 칸을 누르면 현재탄이 됩니다.</p>
                 </div>
                 <div class="guide-step">
                   <span class="guide-icon guide-ring" aria-hidden="true"></span>
-                  <strong>배달하기</strong>
-                  <p>주문 음식이 위쪽 같은 색 배달칸에 잠깐 머물면 콤보가 오릅니다.</p>
+                  <strong>위 칸에 배달</strong>
+                  <p>주문 재료를 같은 색 위쪽 배달칸에 잠깐 머물게 하면 완료됩니다.</p>
                 </div>
               </div>
-              <p class="guide-tip">첫 발사 전까지 타이머는 멈춥니다. 첫 주문부터 바로 배달해 보세요.</p>
+              <p class="guide-tip">첫 발사 전까지 타이머는 멈춥니다. 막히면 보관함에서 필요한 재료를 골라 다시 쏘세요.</p>
               <button id="startButton" class="primary-button" type="button">바로 시작</button>
             </div>
           </div>

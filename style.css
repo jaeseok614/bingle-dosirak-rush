@@ -751,7 +751,7 @@ h1 {
 }
 
 .guide-box {
-  width: min(620px, 100%);
+  width: min(760px, 100%);
 }
 
 .result-box {
@@ -787,7 +787,7 @@ h1 {
 
 .guide-steps {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 10px;
   margin-bottom: 14px;
 }
