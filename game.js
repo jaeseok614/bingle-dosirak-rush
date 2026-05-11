@@ -1237,7 +1237,6 @@
       },
     );
     markPlayerHit(piece, now);
-    piece.lastLaunchAt = now;
     piece.bump = 0.28;
 
     game.cannon.aiming = false;
@@ -1326,10 +1325,10 @@
     }
 
     const angle = pad.directionAngle;
-    const speed = randomRange(12.6, 17.8, game.orderRng) / (1 + piece.level * 0.04);
+    const speed = randomRange(15.8, 21.2, game.orderRng) / (1 + piece.level * 0.04);
     Body.setVelocity(piece.body, {
-      x: piece.body.velocity.x * 0.22 + Math.cos(angle) * speed,
-      y: piece.body.velocity.y * 0.18 + Math.sin(angle) * speed,
+      x: piece.body.velocity.x * 0.08 + Math.cos(angle) * speed,
+      y: piece.body.velocity.y * 0.08 + Math.sin(angle) * speed,
     });
     Body.setAngularVelocity(piece.body, randomRange(-0.42, 0.42, game.orderRng));
     piece.bump = 0.24;
@@ -1935,7 +1934,7 @@
           piece.body.position.x - pad.body.position.x,
           piece.body.position.y - pad.body.position.y,
         );
-        if (distance <= pad.radius + piece.body.circleRadius * 0.72) {
+        if (distance <= pad.radius + piece.body.circleRadius * 1.28) {
           triggerLaunchPad(piece, pad);
           break;
         }
