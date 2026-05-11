@@ -295,28 +295,30 @@ async function playTouchRun(client) {
     `(() => {
       const rect = document.querySelector('#gameCanvas').getBoundingClientRect();
       return {
-        left: { x: Math.round(rect.left + rect.width * 0.25), y: Math.round(rect.top + rect.height * 0.55) },
-        right: { x: Math.round(rect.left + rect.width * 0.75), y: Math.round(rect.top + rect.height * 0.55) },
+        launcher: { x: Math.round(rect.left + rect.width * 0.5), y: Math.round(rect.top + rect.height * 0.85) },
+        left: { x: Math.round(rect.left + rect.width * 0.28), y: Math.round(rect.top + rect.height * 0.32) },
+        right: { x: Math.round(rect.left + rect.width * 0.72), y: Math.round(rect.top + rect.height * 0.32) },
       };
     })()`,
   );
 
   const startedAt = Date.now();
   let step = 0;
-  let touchControlObserved = false;
   while (Date.now() - startedAt < 65000) {
     const direction = step % 2 === 0 ? "right" : "left";
-    const point = points[direction];
+    const target = points[direction];
     await client.send("Input.dispatchTouchEvent", {
       type: "touchStart",
-      touchPoints: [{ x: point.x, y: point.y, radiusX: 8, radiusY: 8, force: 1, id: 1 }],
+      touchPoints: [{ x: points.launcher.x, y: points.launcher.y, radiusX: 8, radiusY: 8, force: 1, id: 1 }],
     });
-    touchControlObserved ||= await evaluate(
-      client,
-      `document.querySelector('.touch-zone[data-dir="${direction}"]')?.classList.contains('is-active') === true`,
-    );
-    await sleep(560);
+    await sleep(80);
+    await client.send("Input.dispatchTouchEvent", {
+      type: "touchMove",
+      touchPoints: [{ x: target.x, y: target.y, radiusX: 8, radiusY: 8, force: 1, id: 1 }],
+    });
+    await sleep(180);
     await client.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+    await sleep(300);
 
     if (step % 10 === 5) {
       await click(client, "#skillButton");
@@ -326,9 +328,6 @@ async function playTouchRun(client) {
       break;
     }
     step += 1;
-  }
-  if (!touchControlObserved) {
-    throw new Error("Mobile touch controls did not activate.");
   }
   await waitForExpression(client, "!document.querySelector('#gameOver').hidden", 10000);
 }

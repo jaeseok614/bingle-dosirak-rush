@@ -101,13 +101,11 @@
   const FEVER_COMBO = 8;
   const FEVER_ORDER_STREAK = 3;
   const SKILL_COOLDOWN = 8;
-  const DELIVERY_HOLD_SECONDS = 0.45;
+  const DELIVERY_HOLD_SECONDS = 0.18;
   const WRONG_HOLD_SECONDS = 1.35;
   const FORBIDDEN_HOLD_SECONDS = 0.9;
   const MAX_PIECES = 16;
-  const BASE_SPAWN_SECONDS = 1.85;
-  const FEVER_SPAWN_SECONDS = 1.15;
-  const STARTER_PIECES = 6;
+  const STARTER_PIECES = 5;
   const MAX_FOOD_LEVEL = 3;
   const LAUNCH_PAD_COOLDOWN_MS = 520;
   const LAUNCH_PAD_MERGE_REFRESH_MS = 3200;
@@ -180,7 +178,7 @@
       cost: 70,
       color: "#e85d4f",
       image: "assets/characters/sprinter.png",
-      description: "플리퍼 힘 +15%, 톡 치기 쿨타임 -15%",
+      description: "발사 속도 +15%, 톡 치기 쿨타임 -15%",
       stats: {
         rotate: 1.15,
         score: 1,
@@ -494,27 +492,21 @@
     { x: 182, y: -82, radius: 24, color: "#f1c453", edge: "#9b7423" },
     { x: -112, y: 96, radius: 24, color: "#6d4c96", edge: "#422b61" },
     { x: 120, y: 126, radius: 25, color: "#e85d4f", edge: "#9c302c" },
-    { x: 0, y: 218, radius: 31, color: "#2f6d5b", edge: "#18312b" },
   ];
-  const FLIPPER_SPECS = {
-    left: {
-      direction: "left",
-      side: -1,
-      x: CENTER.x - 252,
-      y: CENTER.y + 220,
-      angle: 0.22,
-      swing: -0.62,
-      hitRadius: 292,
-    },
-    right: {
-      direction: "right",
-      side: 1,
-      x: CENTER.x + 252,
-      y: CENTER.y + 220,
-      angle: -0.22,
-      swing: 0.62,
-      hitRadius: 292,
-    },
+  const CANNON = {
+    x: CENTER.x,
+    y: ARENA.bottom - 44,
+    minAngle: -2.58,
+    maxAngle: -0.56,
+    defaultAngle: -Math.PI / 2,
+    leftAngle: -1.95,
+    rightAngle: -1.19,
+    minPower: 0.54,
+    presetPower: 0.92,
+    maxPower: 1,
+    dragDistance: 190,
+    baseSpeed: 17.8,
+    reloadSeconds: 0.28,
   };
 
   const ITEMS = {
@@ -664,9 +656,18 @@
     lastShareText: "",
     trayAngle: 0,
     trayVelocity: 0,
-    flipperTimers: {
-      left: 0,
-      right: 0,
+    cannon: {
+      loadedType: FOOD_KEYS[0],
+      loadedLevel: 0,
+      nextType: FOOD_KEYS[1],
+      angle: CANNON.defaultAngle,
+      power: 0.74,
+      aiming: false,
+      pointerId: null,
+      aimPoint: { x: CANNON.x, y: CANNON.y - CANNON.dragDistance * 0.74 },
+      reloadTimer: 0,
+      flash: 0,
+      shotCount: 0,
     },
     nextOrderDelay: 0,
     lastFrame: 0,
@@ -763,14 +764,14 @@
       if (event.key === "ArrowLeft" || event.key.toLowerCase() === "a") {
         setDirectionActive("left", true);
         if (!event.repeat) {
-          triggerFlipper("left");
+          triggerCannonPreset("left");
         }
         event.preventDefault();
       }
       if (event.key === "ArrowRight" || event.key.toLowerCase() === "d") {
         setDirectionActive("right", true);
         if (!event.repeat) {
-          triggerFlipper("right");
+          triggerCannonPreset("right");
         }
         event.preventDefault();
       }
@@ -781,6 +782,10 @@
         showGuide();
       }
       if (event.code === "Space") {
+        fireCannonFromCurrentAim();
+        event.preventDefault();
+      }
+      if (event.key.toLowerCase() === "e") {
         useSkill();
         event.preventDefault();
       }
@@ -807,12 +812,17 @@
         unlockAudio();
         button.setPointerCapture(event.pointerId);
         setActive(true);
-        triggerFlipper(direction);
+        triggerCannonPreset(direction);
       });
       button.addEventListener("pointerup", () => setActive(false));
       button.addEventListener("pointercancel", () => setActive(false));
       button.addEventListener("lostpointercapture", () => setActive(false));
     }
+
+    canvas.addEventListener("pointerdown", handleCannonPointerDown);
+    canvas.addEventListener("pointermove", handleCannonPointerMove);
+    canvas.addEventListener("pointerup", handleCannonPointerUp);
+    canvas.addEventListener("pointercancel", cancelCannonAim);
 
     ui.restart.addEventListener("click", openCharacterSelect);
     ui.modeButton.addEventListener("click", toggleMode);
@@ -992,15 +1002,15 @@
     game.wasRunningBeforeShop = false;
     game.magnetTimer = 0;
     game.itemSpawnTimer = getInitialItemDelay();
-    game.ingredientSpawnTimer = 0.35;
-    game.itemMessage = "대기";
+    game.ingredientSpawnTimer = 0;
+    game.itemMessage = "조준 대기";
     game.itemMessageTimer = 0;
     game.feverTimer = 0;
     game.feverComboArmed = true;
     game.feverParticleTimer = 0;
     game.orderStreak = 0;
     game.skillCooldown = 0;
-    game.characterMessage = shouldRun ? "좌우로 튕겨 시작" : "준비 완료";
+    game.characterMessage = shouldRun ? "드래그해서 조준" : "준비 완료";
     game.characterMood = shouldRun ? "happy" : "idle";
     game.characterReactionTimer = shouldRun ? 1.6 : 0;
     game.newAchievements = [];
@@ -1008,8 +1018,7 @@
     game.lastShareText = "";
     game.trayAngle = 0;
     game.trayVelocity = 0;
-    game.flipperTimers.left = 0;
-    game.flipperTimers.right = 0;
+    resetCannonLoad();
     game.nextOrderDelay = 0;
     game.lastFrame = 0;
     ui.modal.hidden = true;
@@ -1021,6 +1030,7 @@
     ui.shopStatus.textContent = "";
     updateTrayBodies();
     createOrder();
+    prepareCannonLoad(true);
     updateCharacterHud(true);
     updateUi(true);
   }
@@ -1031,7 +1041,7 @@
     resetControls();
     ui.guideOverlay.hidden = true;
     ui.characterSelectOverlay.hidden = true;
-    setCharacterReaction("좌우로 튕겨 시작", "happy", 1.6);
+    setCharacterReaction("드래그해서 발사", "happy", 1.6);
   }
 
   function showGuide() {
@@ -1063,6 +1073,7 @@
   function resetControls() {
     setDirectionActive("left", false);
     setDirectionActive("right", false);
+    cancelCannonAim();
   }
 
   function setDirectionActive(direction, active) {
@@ -1105,49 +1116,161 @@
     updateUi(false);
   }
 
-  function triggerFlipper(direction) {
-    if (!game.running || !["left", "right"].includes(direction)) return;
+  function getCanvasPoint(event) {
+    const rect = canvas.getBoundingClientRect();
+    return {
+      x: ((event.clientX - rect.left) / rect.width) * WIDTH,
+      y: ((event.clientY - rect.top) / rect.height) * HEIGHT,
+    };
+  }
+
+  function canUseCannon() {
+    return (
+      game.running &&
+      game.started &&
+      game.timeLeft > 0 &&
+      ui.guideOverlay.hidden &&
+      !isBlockingOverlayOpen() &&
+      game.cannon.loadedType &&
+      game.cannon.reloadTimer <= 0
+    );
+  }
+
+  function setCannonAim(angle, power) {
+    game.cannon.angle = clamp(angle, CANNON.minAngle, CANNON.maxAngle);
+    game.cannon.power = clamp(power, CANNON.minPower, CANNON.maxPower);
+    game.cannon.aimPoint = {
+      x: CANNON.x + Math.cos(game.cannon.angle) * CANNON.dragDistance * game.cannon.power,
+      y: CANNON.y + Math.sin(game.cannon.angle) * CANNON.dragDistance * game.cannon.power,
+    };
+  }
+
+  function updateCannonAim(point) {
+    const dx = point.x - CANNON.x;
+    const dy = point.y - CANNON.y;
+    const distance = Math.max(1, Math.hypot(dx, dy));
+    setCannonAim(Math.atan2(dy, dx), distance / CANNON.dragDistance);
+  }
+
+  function handleCannonPointerDown(event) {
+    if (!canUseCannon()) return;
+
+    event.preventDefault();
+    unlockAudio();
+    canvas.setPointerCapture?.(event.pointerId);
+    game.cannon.aiming = true;
+    game.cannon.pointerId = event.pointerId;
+    updateCannonAim(getCanvasPoint(event));
+  }
+
+  function handleCannonPointerMove(event) {
+    if (!game.cannon.aiming || game.cannon.pointerId !== event.pointerId) return;
+
+    event.preventDefault();
+    updateCannonAim(getCanvasPoint(event));
+  }
+
+  function handleCannonPointerUp(event) {
+    if (!game.cannon.aiming || game.cannon.pointerId !== event.pointerId) return;
+
+    event.preventDefault();
+    updateCannonAim(getCanvasPoint(event));
+    canvas.releasePointerCapture?.(event.pointerId);
+    fireCannonFromCurrentAim();
+  }
+
+  function cancelCannonAim(event = null) {
+    if (event && game.cannon.pointerId !== event.pointerId) return;
+
+    game.cannon.aiming = false;
+    game.cannon.pointerId = null;
+  }
+
+  function triggerCannonPreset(direction) {
+    if (!["left", "right"].includes(direction) || !canUseCannon()) return;
 
     unlockAudio();
+    setCannonAim(direction === "left" ? CANNON.leftAngle : CANNON.rightAngle, CANNON.presetPower);
+    fireCannonFromCurrentAim();
+  }
+
+  function fireCannonFromCurrentAim() {
+    if (!canUseCannon()) return;
+
+    const now = performance.now();
+    const type = game.cannon.loadedType || pickSpawnType();
+    const level = game.cannon.loadedLevel || 0;
+    const speed = CANNON.baseSpeed * (0.76 + game.cannon.power * 0.46) * getCharacterStats().rotate;
+    trimCannonBoard();
     markFirstInput();
-    const spec = FLIPPER_SPECS[direction];
-    const side = spec.side;
-    const stats = getCharacterStats();
-    const hitAt = performance.now();
-    const pivot = {
-      x: spec.x,
-      y: spec.y,
-    };
-    let hitCount = 0;
 
-    for (const piece of game.pieces) {
-      const body = piece.body;
-      const dx = body.position.x - pivot.x;
-      const dy = body.position.y - pivot.y;
-      const distance = Math.hypot(dx, dy);
-      const inSide = side < 0 ? body.position.x < CENTER.x + 132 : body.position.x > CENTER.x - 132;
-      const inBottomGap = Math.abs(body.position.x - CENTER.x) < 118 && body.position.y > CENTER.y + 118;
-      if ((!inSide && !inBottomGap) || distance > spec.hitRadius || body.position.y < CENTER.y - 22) continue;
+    const piece = spawnIngredient(
+      type,
+      0,
+      1,
+      level,
+      {
+        x: CANNON.x,
+        y: CANNON.y,
+      },
+      {
+        x: Math.cos(game.cannon.angle) * speed,
+        y: Math.sin(game.cannon.angle) * speed,
+      },
+    );
+    markPlayerHit(piece, now);
+    piece.lastLaunchAt = now;
+    piece.bump = 0.28;
 
-      const lift = (inBottomGap ? 18.4 : 15.8) * stats.rotate;
-      const sideKick = -side * (5.25 + piece.level * 0.32);
-      const spread = inBottomGap ? randomRange(-0.85, 0.85, game.orderRng) : (body.position.x - CENTER.x) * 0.003;
-      Body.setVelocity(body, {
-        x: body.velocity.x * 0.16 + (sideKick + spread) * stats.rotate,
-        y: Math.min(body.velocity.y * 0.06 - lift, -13.8),
-      });
-      Body.setAngularVelocity(body, randomRange(-0.28, 0.28));
-      piece.bump = 0.18;
-      markPlayerHit(piece, hitAt);
-      hitCount += 1;
+    game.cannon.aiming = false;
+    game.cannon.pointerId = null;
+    game.cannon.reloadTimer = CANNON.reloadSeconds;
+    game.cannon.flash = 0.28;
+    game.cannon.shotCount += 1;
+    game.itemMessage = `${getFoodName(type, level)} 발사!`;
+    game.itemMessageTimer = 0.9;
+    burst(CANNON.x, CANNON.y, FOODS[type].color, 18);
+    advanceCannonLoad();
+    playSound("item");
+    vibrate(10);
+  }
+
+  function trimCannonBoard() {
+    while (game.pieces.length >= MAX_PIECES) {
+      const candidate = [...game.pieces]
+        .filter((piece) => !piece.scored && !piece.merging)
+        .sort((a, b) => a.bornAt - b.bornAt)[0];
+      if (!candidate) return;
+
+      World.remove(game.world, candidate.body);
+      game.pieces = game.pieces.filter((piece) => piece !== candidate);
     }
+  }
 
-    game.flipperTimers[direction] = 0.2;
-    game.trayVelocity += -side * 0.16;
-    game.itemMessage = direction === "left" ? "왼쪽 젓가락!" : "오른쪽 젓가락!";
-    game.itemMessageTimer = 0.8;
-    playSound(hitCount ? "item" : "success");
-    vibrate(hitCount ? 12 : 6);
+  function resetCannonLoad() {
+    game.cannon.loadedType = "";
+    game.cannon.loadedLevel = 0;
+    game.cannon.nextType = "";
+    game.cannon.reloadTimer = 0;
+    game.cannon.flash = 0;
+    game.cannon.shotCount = 0;
+    game.cannon.aiming = false;
+    game.cannon.pointerId = null;
+    setCannonAim(CANNON.defaultAngle, 0.74);
+  }
+
+  function prepareCannonLoad(force = false) {
+    if (force || !game.cannon.loadedType) {
+      game.cannon.loadedType = pickSpawnType();
+      game.cannon.loadedLevel = 0;
+    }
+    game.cannon.nextType = pickSpawnType();
+  }
+
+  function advanceCannonLoad() {
+    game.cannon.loadedType = game.cannon.nextType || pickSpawnType();
+    game.cannon.loadedLevel = 0;
+    game.cannon.nextType = pickSpawnType();
   }
 
   function markFirstInput() {
@@ -1259,6 +1382,9 @@
 
     if (game.pieces.length === 0) {
       spawnStarterIngredients();
+    }
+    if (game.started) {
+      prepareCannonLoad(false);
     }
     updateUi(true);
   }
@@ -1386,12 +1512,12 @@
         STARTER_PIECES,
         0,
         {
-          x: CENTER.x + lane * 64 + randomRange(-12, 12, game.orderRng),
-          y: ARENA.bottom - 92 + randomRange(-24, 10, game.orderRng),
+          x: CENTER.x + lane * 92 + randomRange(-18, 18, game.orderRng),
+          y: CENTER.y + 48 + randomRange(-42, 48, game.orderRng),
         },
         {
-          x: randomRange(-0.4, 0.4, game.orderRng),
-          y: randomRange(-0.4, 0.2, game.orderRng),
+          x: randomRange(-0.25, 0.25, game.orderRng),
+          y: randomRange(-0.2, 0.25, game.orderRng),
         },
       );
     }
@@ -1659,7 +1785,7 @@
       if (piece.scored || piece.merging) continue;
 
       let target = getMergeCandidateTarget(piece);
-      if (!target && needsMore(piece.type, piece.level)) {
+      if (!target && getDeliverableOrderId(piece)) {
         const slot = SLOTS.find((candidate) => candidate.type === piece.type);
         if (slot) {
           target = { x: slot.x, y: slot.y };
@@ -1683,20 +1809,21 @@
     if (game.nextOrderDelay > 0) return;
 
     for (const piece of game.pieces) {
-      if (piece.scored || piece.merging || !needsMore(piece.type, piece.level)) continue;
+      if (piece.scored || piece.merging || !getDeliverableOrderId(piece)) continue;
 
       const slot = SLOTS.find((candidate) => candidate.type === piece.type);
       if (!slot) continue;
 
-      if (piece.body.position.y > ARENA.bottom - 112) continue;
+      if (piece.body.position.y > ARENA.bottom - 58) continue;
 
       const dx = slot.x - piece.body.position.x;
       const dy = slot.y - piece.body.position.y;
       const pullDistance = Math.max(72, Math.hypot(dx, dy));
       const xGap = Math.abs(piece.body.position.x - slot.x);
-      const slotScale = piece.body.position.y < CENTER.y + 88 ? 1 : 0.36;
-      const aimScale = xGap <= SLOT_WIDTH * 0.82 ? 1 : 0.54;
-      const strength = 0.000075 * slotScale * aimScale * piece.body.mass;
+      const recentShot = performance.now() - (piece.lastPlayerHitAt || 0) < 3400;
+      const slotScale = piece.body.position.y < CENTER.y + 150 ? 1.35 : 0.55;
+      const aimScale = xGap <= SLOT_WIDTH * 1.15 ? 1.25 : recentShot ? 0.78 : 0.48;
+      const strength = 0.00016 * slotScale * aimScale * piece.body.mass;
 
       Body.applyForce(piece.body, piece.body.position, {
         x: (dx / pullDistance) * strength,
@@ -1736,38 +1863,12 @@
   function updateIngredientSpawns(dt) {
     if (!game.running || game.nextOrderDelay > 0) return;
 
-    game.ingredientSpawnTimer -= dt;
-    if (game.ingredientSpawnTimer > 0) return;
-
-    if (game.pieces.length < MAX_PIECES) {
-      spawnIngredient(
-        pickSpawnType(),
-        0,
-        1,
-        0,
-        {
-          x: CENTER.x + randomRange(-176, 176, game.orderRng),
-          y: ARENA.top + 170 + randomRange(-8, 14, game.orderRng),
-        },
-        {
-          x: randomRange(-1.3, 1.3, game.orderRng),
-          y: randomRange(-0.2, 1.2, game.orderRng),
-        },
-      );
-      game.itemMessage = "새 재료";
-      game.itemMessageTimer = Math.max(game.itemMessageTimer, 0.75);
-    }
-    game.ingredientSpawnTimer = getIngredientSpawnDelay();
+    game.ingredientSpawnTimer = Math.max(0, game.ingredientSpawnTimer - dt);
   }
 
-  function getIngredientSpawnDelay() {
-    const delay = game.feverTimer > 0 ? FEVER_SPAWN_SECONDS : BASE_SPAWN_SECONDS;
-    return delay / Math.max(0.8, meta.balance.orderDifficulty);
-  }
-
-  function updateFlippers(dt) {
-    game.flipperTimers.left = Math.max(0, game.flipperTimers.left - dt);
-    game.flipperTimers.right = Math.max(0, game.flipperTimers.right - dt);
+  function updateCannon(dt) {
+    game.cannon.reloadTimer = Math.max(0, game.cannon.reloadTimer - dt);
+    game.cannon.flash = Math.max(0, game.cannon.flash - dt);
   }
 
   function updateLaunchPads(dt) {
@@ -1815,7 +1916,7 @@
 
   function updateGame(dt) {
     if (game.awaitingFirstInput) {
-      updateFlippers(dt);
+      updateCannon(dt);
       updateLaunchPads(dt);
       updateCharacterReaction(dt);
       return;
@@ -1835,7 +1936,7 @@
     updateItemTimers(dt);
     updateFever(dt);
     updateSkill(dt);
-    updateFlippers(dt);
+    updateCannon(dt);
     updateLaunchPads(dt);
     updateCharacterReaction(dt);
 
@@ -1915,6 +2016,7 @@
 
       const body = piece.body;
       const slot = getSlotForBody(body);
+      const deliverableId = getDeliverableOrderId(piece);
 
       if (slot && isForbiddenSlot(slot, piece)) {
         piece.forbiddenHold += dt;
@@ -1923,13 +2025,13 @@
         if (piece.forbiddenHold >= FORBIDDEN_HOLD_SECONDS) {
           punishForbiddenPiece(piece);
         }
-      } else if (slot && slot.type === piece.type && needsMore(piece.type, piece.level)) {
+      } else if (slot && slot.type === piece.type && deliverableId) {
         stabilizeDeliveryPiece(piece, slot, dt);
         piece.hold += dt;
         piece.wrongHold = 0;
         piece.forbiddenHold = Math.max(0, piece.forbiddenHold - dt * 1.8);
         if (piece.hold >= DELIVERY_HOLD_SECONDS) {
-          scorePiece(piece, slot);
+          scorePiece(piece, slot, deliverableId);
         }
       } else if (slot && slot.type !== piece.type && piece.level > 0) {
         piece.hold = 0;
@@ -1954,7 +2056,7 @@
     const dx = target.x - piece.body.position.x;
     const dy = target.y - piece.body.position.y;
     const distance = Math.max(42, Math.hypot(dx, dy));
-    const strength = 0.00009 * piece.body.mass;
+    const strength = 0.00018 * piece.body.mass;
 
     Body.applyForce(piece.body, piece.body.position, {
       x: (dx / distance) * strength,
@@ -1978,9 +2080,9 @@
     );
   }
 
-  function scorePiece(piece, slot) {
+  function scorePiece(piece, slot, deliveredId = "") {
     piece.scored = true;
-    const id = orderKey(piece.type, piece.level);
+    const id = deliveredId || getDeliverableOrderId(piece) || orderKey(piece.type, piece.level);
     game.progress[id] = game.progress[id] || 0;
     game.progress[id] += 1;
     game.targetDone += 1;
@@ -3222,12 +3324,26 @@
     return (game.progress?.[id] || 0) < (game.order?.[id] || 0);
   }
 
+  function getDeliverableOrderId(piece) {
+    if (!piece || !game.order) return "";
+
+    return (
+      Object.keys(game.order)
+        .filter((id) => {
+          const { type, level } = parseOrderKey(id);
+          return type === piece.type && level <= piece.level && (game.progress?.[id] || 0) < (game.order?.[id] || 0);
+        })
+        .sort((a, b) => parseOrderKey(b).level - parseOrderKey(a).level)[0] || ""
+    );
+  }
+
   function getSlotForBody(body) {
-    const extra = body.circleRadius * 0.9;
+    const extra = body.circleRadius * 1.25;
+    const xExtra = body.circleRadius * 0.95;
     if (body.position.y < ARENA.slotTop - extra || body.position.y > ARENA.slotBottom + extra) return null;
 
     for (const slot of SLOTS) {
-      if (body.position.x >= slot.left && body.position.x <= slot.right) {
+      if (body.position.x >= slot.left - xExtra && body.position.x <= slot.right + xExtra) {
         return slot;
       }
     }
@@ -3392,7 +3508,7 @@
     drawBackdrop();
     drawTray();
     drawLaunchPads();
-    drawFlippers();
+    drawCannon();
     drawPowerItems();
     drawPieces();
     drawParticles();
@@ -3524,19 +3640,92 @@
     ctx.restore();
   }
 
-  function drawFlippers() {
-    for (const spec of Object.values(FLIPPER_SPECS)) {
-      const active = game.flipperTimers[spec.direction] > 0;
-      const swing = active ? spec.swing : 0;
+  function drawCannon() {
+    const cannon = game.cannon;
+    const loadedType = cannon.loadedType || FOOD_KEYS[0];
+    const flash = cannon.flash / 0.28;
+    const ready = game.started && game.timeLeft > 0 && ui.modal.hidden;
+    const barrelRotation = cannon.angle + Math.PI / 2;
+    const muzzle = {
+      x: CANNON.x + Math.cos(cannon.angle) * 36,
+      y: CANNON.y + Math.sin(cannon.angle) * 36,
+    };
+
+    ctx.save();
+    if (ready) {
+      ctx.fillStyle = cannon.aiming ? "#f1c453" : "rgba(47, 109, 91, 0.62)";
+      const step = 24 + cannon.power * 8;
+      for (let i = 1; i <= 10; i += 1) {
+        const distance = i * step;
+        const x = CANNON.x + Math.cos(cannon.angle) * distance;
+        const y = CANNON.y + Math.sin(cannon.angle) * distance + i * i * 0.8;
+        if (x < ARENA.left + 16 || x > ARENA.right - 16 || y < ARENA.top + 20 || y > ARENA.bottom - 12) {
+          continue;
+        }
+        ctx.globalAlpha = Math.max(0.18, 0.78 - i * 0.055);
+        ctx.beginPath();
+        ctx.arc(x, y, Math.max(3, 7 - i * 0.25), 0, TAU);
+        ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+    }
+
+    ctx.translate(CANNON.x, CANNON.y);
+    ctx.rotate(barrelRotation);
+    ctx.shadowColor = flash > 0 ? "rgba(241, 196, 83, 0.7)" : "rgba(24, 49, 43, 0.22)";
+    ctx.shadowBlur = 12 + flash * 22;
+    ctx.fillStyle = flash > 0 ? "#f1c453" : "#244f45";
+    ctx.strokeStyle = flash > 0 ? "#ffffff" : "rgba(255, 255, 255, 0.78)";
+    ctx.lineWidth = 5;
+    roundRect(-19, -68, 38, 82, 18);
+    ctx.fill();
+    ctx.stroke();
+    ctx.shadowColor = "transparent";
+    ctx.fillStyle = "#18312b";
+    roundRect(-12, -60, 24, 54, 12);
+    ctx.fill();
+    ctx.restore();
+
+    ctx.save();
+    ctx.fillStyle = "#10231f";
+    ctx.strokeStyle = "#2f6d5b";
+    ctx.lineWidth = 6;
+    ctx.beginPath();
+    ctx.arc(CANNON.x, CANNON.y + 10, 38 + flash * 7, Math.PI, 0);
+    ctx.lineTo(CANNON.x + 54, CANNON.y + 42);
+    ctx.lineTo(CANNON.x - 54, CANNON.y + 42);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+    ctx.restore();
+
+    if (loadedType) {
+      drawIngredient({
+        type: loadedType,
+        level: cannon.loadedLevel || 0,
+        body: { position: muzzle, angle: 0 },
+        bump: flash * 0.2,
+        hold: 0,
+        forbiddenHold: 0,
+        wrongHold: 0,
+      });
+    }
+
+    if (cannon.nextType) {
       ctx.save();
-      ctx.translate(spec.x, spec.y);
-      ctx.rotate(spec.angle + swing);
-      ctx.fillStyle = active ? "#f1c453" : "#244f45";
-      ctx.strokeStyle = active ? "#9b7423" : "rgba(255, 255, 255, 0.72)";
-      ctx.lineWidth = 4;
-      roundRect(-58, -8, 116, 16, 8);
-      ctx.fill();
-      ctx.stroke();
+      ctx.globalAlpha = 0.72;
+      ctx.translate(CANNON.x + 70, CANNON.y + 28);
+      ctx.scale(0.72, 0.72);
+      ctx.translate(-(CANNON.x + 70), -(CANNON.y + 28));
+      drawIngredient({
+        type: cannon.nextType,
+        level: 0,
+        body: { position: { x: CANNON.x + 70, y: CANNON.y + 28 }, angle: 0 },
+        bump: 0,
+        hold: 0,
+        forbiddenHold: 0,
+        wrongHold: 0,
+      });
       ctx.restore();
     }
   }
@@ -3547,11 +3736,31 @@
     for (const pad of game.launchPads) {
       const pulse = Math.sin(time + pad.phase) * 2.5;
       const flash = pad.flash / 0.38;
+      const isSafetyPad = Math.abs(pad.x) < 1 && pad.y > 190;
 
       ctx.save();
       ctx.translate(pad.body.position.x, pad.body.position.y);
       ctx.shadowColor = pad.color;
       ctx.shadowBlur = 10 + flash * 18;
+
+      if (isSafetyPad) {
+        ctx.fillStyle = "rgba(24, 49, 43, 0.92)";
+        ctx.strokeStyle = flash > 0 ? "#ffffff" : pad.edge;
+        ctx.lineWidth = 5;
+        roundRect(-76, -24, 152, 48, 24);
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.strokeStyle = flash > 0 ? "#ffffff" : pad.color;
+        ctx.lineWidth = 4;
+        for (const x of [-34, 0, 34]) {
+          ctx.beginPath();
+          ctx.moveTo(x - 14, 6);
+          ctx.lineTo(x, -10 - flash * 4);
+          ctx.lineTo(x + 14, 6);
+          ctx.stroke();
+        }
+      }
 
       ctx.fillStyle = "#10231f";
       ctx.strokeStyle = pad.edge;

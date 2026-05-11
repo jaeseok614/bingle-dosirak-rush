@@ -414,6 +414,8 @@ h1 {
   width: 100%;
   height: auto;
   aspect-ratio: 900 / 680;
+  cursor: crosshair;
+  touch-action: none;
 }
 
 .touch-zones {
