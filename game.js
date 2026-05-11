@@ -107,10 +107,11 @@
   const MAX_PIECES = 16;
   const STARTER_PIECES = 1;
   const MAX_FOOD_LEVEL = 3;
-  const LAUNCH_PAD_COOLDOWN_MS = 520;
+  const LAUNCH_PAD_COOLDOWN_MS = 180;
   const LAUNCH_PAD_MERGE_REFRESH_MS = 3200;
   const PLAYER_MERGE_WINDOW_MS = 2600;
   const MERGE_MIN_RELATIVE_SPEED = 1.1;
+  const BOOSTER_CAPTURE_RADIUS = 86;
   const MAX_TIME_BONUS = 8;
   const TAU = Math.PI * 2;
   const FIT_TEXT_SELECTOR = [
@@ -896,7 +897,8 @@
       const pad = {
         id: `launch-${index}`,
         ...config,
-        body: Bodies.circle(0, 0, config.radius, {
+        captureRadius: config.captureRadius || BOOSTER_CAPTURE_RADIUS,
+        body: Bodies.circle(0, 0, config.captureRadius || BOOSTER_CAPTURE_RADIUS, {
           isStatic: true,
           isSensor: true,
           label: `launch-pad:${index}`,
@@ -1334,7 +1336,7 @@
     piece.bump = 0.24;
     pad.flash = 0.38;
     pad.activeTimer = 0;
-    pad.respawnTimer = randomRange(1.4, 3.8, game.itemRng);
+    pad.respawnTimer = randomRange(0.9, 2.6, game.itemRng);
     pad.directionAngle = pickBoosterDirection();
     game.trayVelocity += randomRange(-0.08, 0.08, game.orderRng);
     game.itemMessage = "부스터!";
@@ -1901,6 +1903,20 @@
     game.cannon.flash = Math.max(0, game.cannon.flash - dt);
   }
 
+  function distanceToSegment(point, start, end) {
+    const dx = end.x - start.x;
+    const dy = end.y - start.y;
+    const lengthSq = dx * dx + dy * dy;
+    if (lengthSq <= 0) {
+      return Math.hypot(point.x - start.x, point.y - start.y);
+    }
+
+    const t = clamp(((point.x - start.x) * dx + (point.y - start.y) * dy) / lengthSq, 0, 1);
+    const closestX = start.x + dx * t;
+    const closestY = start.y + dy * t;
+    return Math.hypot(point.x - closestX, point.y - closestY);
+  }
+
   function updateLaunchPads(dt) {
     for (const pad of game.launchPads) {
       pad.flash = Math.max(0, pad.flash - dt);
@@ -1912,13 +1928,13 @@
       if (pad.activeTimer > 0) {
         pad.activeTimer = Math.max(0, pad.activeTimer - dt);
         if (pad.activeTimer <= 0) {
-          pad.respawnTimer = randomRange(1.4, 4.6, game.itemRng);
+          pad.respawnTimer = randomRange(0.9, 3.2, game.itemRng);
         }
       } else {
         pad.respawnTimer = Math.max(0, pad.respawnTimer - dt);
         if (pad.respawnTimer <= 0) {
           pad.directionAngle = pickBoosterDirection();
-          pad.activeTimer = randomRange(1.35, 2.55, game.itemRng);
+          pad.activeTimer = randomRange(2.25, 3.7, game.itemRng);
           pad.flash = 0.24;
         }
       }
@@ -1934,7 +1950,13 @@
           piece.body.position.x - pad.body.position.x,
           piece.body.position.y - pad.body.position.y,
         );
-        if (distance <= pad.radius + piece.body.circleRadius * 1.28) {
+        const sweepDistance = distanceToSegment(
+          pad.body.position,
+          piece.body.positionPrev || piece.body.position,
+          piece.body.position,
+        );
+        const reach = pad.captureRadius + piece.body.circleRadius * 0.82;
+        if (distance <= reach || sweepDistance <= reach) {
           triggerLaunchPad(piece, pad);
           break;
         }
@@ -3794,6 +3816,13 @@
       ctx.scale(0.72 + appear * 0.28, 0.72 + appear * 0.28);
       ctx.shadowColor = pad.color;
       ctx.shadowBlur = 10 + flash * 18;
+
+      ctx.fillStyle = pad.color;
+      ctx.globalAlpha *= active ? 0.14 : 0.2;
+      ctx.beginPath();
+      ctx.arc(0, 0, pad.captureRadius, 0, TAU);
+      ctx.fill();
+      ctx.globalAlpha = active ? 0.64 + 0.36 * appear : flash * 0.72;
 
       ctx.fillStyle = "#10231f";
       ctx.strokeStyle = pad.edge;
