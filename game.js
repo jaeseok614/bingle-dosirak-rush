@@ -693,6 +693,7 @@
     feverParticleTimer: 0,
     lastRushPhase: 0,
     closingCallShown: false,
+    ammoHintShown: false,
     shotSerial: 0,
     shotStreak: 0,
     orderStreak: 0,
@@ -710,6 +711,7 @@
       loadedLevel: 0,
       nextType: FOOD_KEYS[1],
       nextLevel: 0,
+      loadedFromStashAt: 0,
       angle: CANNON.defaultAngle,
       power: 0.74,
       aiming: false,
@@ -1087,6 +1089,7 @@
     game.newAchievements = [];
     game.lastCoinAward = 0;
     game.lastShareText = "";
+    game.ammoHintShown = false;
     game.trayAngle = 0;
     game.trayVelocity = 0;
     resetCannonLoad();
@@ -1238,6 +1241,7 @@
       unlockAudio();
       return;
     }
+    if (game.cannon.aiming || game.cannon.charging) return;
 
     if (!canUseCannon()) return;
 
@@ -1298,6 +1302,7 @@
     const now = performance.now();
     const type = game.cannon.loadedType || pickCannonType();
     const level = game.cannon.loadedLevel || 0;
+    const fromStash = game.cannon.loadedFromStashAt > 0;
     const speed = CANNON.baseSpeed * (0.76 + game.cannon.power * 0.46) * getCharacterStats().rotate;
     const feverShotCount = game.feverTimer > 0 ? 2 : 1;
     trimCannonBoard();
@@ -1312,6 +1317,7 @@
         speed * (index === 0 ? 1 : 0.96),
         now,
         feverShotCount === 1 ? -1 : index,
+        fromStash,
       );
     }
 
@@ -1330,7 +1336,7 @@
     vibrate(10);
   }
 
-  function spawnCannonShot(type, level, angle, speed, timestamp, index) {
+  function spawnCannonShot(type, level, angle, speed, timestamp, index, fromStash = false) {
     const sideOffset = index < 0 ? 0 : index === 0 ? -9 : 9;
     const piece = spawnIngredient(
       type,
@@ -1346,7 +1352,7 @@
         y: Math.sin(angle) * speed,
       },
     );
-    attachShotMeta(piece, createShotMeta(type, level, timestamp));
+    attachShotMeta(piece, createShotMeta(type, level, timestamp, fromStash));
     markPlayerHit(piece, timestamp);
     piece.bump = 0.28;
     return piece;
@@ -1369,6 +1375,7 @@
     game.cannon.loadedLevel = 0;
     game.cannon.nextType = "";
     game.cannon.nextLevel = 0;
+    game.cannon.loadedFromStashAt = 0;
     game.cannon.reloadTimer = 0;
     game.cannon.flash = 0;
     game.cannon.shotCount = 0;
@@ -1387,8 +1394,7 @@
   }
 
   function advanceCannonLoad() {
-    const stashed = takeAutoAmmoFromStash();
-    setCannonAmmo(stashed || getNextCannonAmmo() || createSmartAmmo());
+    setCannonAmmo(getNextCannonAmmo() || createSmartAmmo());
     setNextCannonAmmo(createSmartAmmo());
   }
 
@@ -1414,27 +1420,15 @@
     return createAmmo(game.cannon.nextType, game.cannon.nextLevel || 0, false);
   }
 
-  function setCannonAmmo(ammo) {
+  function setCannonAmmo(ammo, fromStash = false) {
     game.cannon.loadedType = ammo?.type || "";
     game.cannon.loadedLevel = ammo?.level || 0;
+    game.cannon.loadedFromStashAt = fromStash ? performance.now() : 0;
   }
 
   function setNextCannonAmmo(ammo) {
     game.cannon.nextType = ammo?.type || "";
     game.cannon.nextLevel = ammo?.level || 0;
-  }
-
-  function takeAutoAmmoFromStash() {
-    const usefulIndex = game.ammoStash.findIndex((ammo) => isAmmoUsefulForCurrentOrder(ammo.type, ammo.level));
-    if (usefulIndex >= 0) {
-      return game.ammoStash.splice(usefulIndex, 1)[0];
-    }
-
-    if (getRushPhase() === 0 || game.feverTimer > 0) {
-      return game.ammoStash.shift() || null;
-    }
-
-    return null;
   }
 
   function getPrimaryOrderSlot() {
@@ -1448,8 +1442,8 @@
   }
 
   function getAmmoSlotRects() {
-    const width = 66;
-    const height = 48;
+    const width = 72;
+    const height = 58;
     const gap = 10;
     const totalWidth = AMMO_STASH_SIZE * width + (AMMO_STASH_SIZE - 1) * gap;
     const startX = CENTER.x - totalWidth / 2;
@@ -1467,6 +1461,7 @@
   }
 
   function selectAmmoSlotAtPoint(point) {
+    if (game.cannon.charging) return false;
     if (!game.started || game.timeLeft <= 0 || isBlockingOverlayOpen() || !ui.guideOverlay.hidden) return false;
 
     const slot = getAmmoSlotRects().find((rect) => {
@@ -1492,7 +1487,7 @@
     } else {
       game.ammoStash.splice(index, 1);
     }
-    setCannonAmmo(selected);
+    setCannonAmmo(selected, true);
     game.cannon.reloadTimer = Math.min(game.cannon.reloadTimer, 0.08);
     game.cannon.flash = Math.max(game.cannon.flash, 0.16);
     game.itemMessage = `${getFoodName(selected.type, selected.level)} 장전`;
@@ -1519,16 +1514,18 @@
     }
   }
 
-  function createShotMeta(type, level, timestamp) {
+  function createShotMeta(type, level, timestamp, fromStash = false) {
     game.shotSerial += 1;
     return {
       id: game.shotSerial,
       type,
       level,
       firedAt: timestamp,
+      fromStash,
       wallBounces: 0,
       mergeAwarded: false,
       deliveryAwarded: false,
+      stashAwarded: false,
       bingleAwarded: false,
       nearMissShown: false,
     };
@@ -1697,7 +1694,7 @@
     }
     if (game.started) {
       if (!game.cannon.loadedType || getRushPhase() === 0 || !orderHasType(game.order, game.cannon.loadedType)) {
-        setCannonAmmo(takeAutoAmmoFromStash() || createSmartAmmo());
+        setCannonAmmo(createSmartAmmo());
       }
       setNextCannonAmmo(createSmartAmmo());
     }
@@ -2006,6 +2003,15 @@
     addScore(score, "order");
     showShotFeedback(label, getSlotCenterX(slot), ARENA.slotTop - 18, color);
     registerShotResult({ x: getSlotCenterX(slot), y: slot.y }, color);
+  }
+
+  function awardStashDeliveryBonus(piece, slot) {
+    const shot = getActiveShot(piece);
+    if (!shot?.fromStash || shot.stashAwarded) return;
+
+    shot.stashAwarded = true;
+    addScore(300, "order");
+    showShotFeedback("준비배송! +300", getSlotCenterX(slot), ARENA.slotTop - 44, "#f1c453");
   }
 
   function registerShotResult(position, color) {
@@ -2595,36 +2601,25 @@
       game.itemMessage = `${getFoodName(ammo.type, ammo.level)} 배달 준비`;
       game.itemMessageTimer = 1.4;
       showFloatingText("보관!", CANNON.x, CANNON.y - 112, FOODS[ammo.type].color, 26);
+      showAmmoTapHint();
     } else {
       game.ammoStash.push(ammo);
     }
 
     trimAmmoStash();
-    promoteUsefulAmmoIfNeeded();
     if (!game.cannon.loadedType) {
-      setCannonAmmo(takeAutoAmmoFromStash() || createSmartAmmo());
+      setCannonAmmo(createSmartAmmo());
     }
     updateUi(false);
   }
 
-  function promoteUsefulAmmoIfNeeded() {
-    const usefulIndex = game.ammoStash.findIndex((ammo) => isAmmoUsefulForCurrentOrder(ammo.type, ammo.level));
-    if (usefulIndex < 0) return;
+  function showAmmoTapHint() {
+    if (game.ammoHintShown) return;
 
-    const current = getCurrentCannonAmmo();
-    const currentUseful = current && isAmmoUsefulForCurrentOrder(current.type, current.level);
-    const shouldPromote = !current || !currentUseful || getRushPhase() === 0 || game.feverTimer > 0;
-    if (!shouldPromote) return;
-
-    const [selected] = game.ammoStash.splice(usefulIndex, 1);
-    if (!selected) return;
-
-    if (current) {
-      game.ammoStash.unshift(current);
-      trimAmmoStash();
-    }
-    setCannonAmmo(selected);
-    game.cannon.flash = Math.max(game.cannon.flash, 0.18);
+    game.ammoHintShown = true;
+    const rect = getAmmoSlotRects()[0];
+    showFloatingText("탭해서 장전!", rect.centerX, rect.y - 12, "#f1c453", 26);
+    setCharacterReaction("보관함을 눌러 장전", "happy", 1.6);
   }
 
   function trimAmmoStash() {
@@ -2720,6 +2715,7 @@
       addScore(baseScore + comboBonus, "order");
     }
     awardDeliveryShotBonus(piece, slot);
+    awardStashDeliveryBonus(piece, slot);
     if (game.timeLeft <= 10) {
       addScore(500, "order");
       showShotFeedback("마감배송! +500", slot ? getSlotCenterX(slot) : piece.body.position.x, ARENA.slotTop - 24, "#e85d4f");
@@ -4460,12 +4456,12 @@
       if (ammo) {
         ctx.save();
         ctx.translate(rect.centerX, rect.centerY);
-        ctx.scale(0.58, 0.58);
+        ctx.scale(0.54, 0.54);
         ctx.translate(-rect.centerX, -rect.centerY);
         drawIngredient({
           type: ammo.type,
           level: ammo.level,
-          body: { position: { x: rect.centerX, y: rect.centerY }, angle: 0 },
+          body: { position: { x: rect.centerX, y: rect.centerY - (useful ? 5 : 1) }, angle: 0 },
           bump: 0,
           hold: 0,
           forbiddenHold: 0,
@@ -4473,6 +4469,16 @@
           deliveryReadyUntil: useful ? performance.now() + 1 : 0,
         });
         ctx.restore();
+
+        if (useful) {
+          ctx.save();
+          ctx.fillStyle = "#18312b";
+          ctx.font = "950 12px system-ui, sans-serif";
+          ctx.textAlign = "center";
+          ctx.textBaseline = "middle";
+          ctx.fillText("배송!", rect.centerX, rect.y + rect.height - 9);
+          ctx.restore();
+        }
       }
     }
   }
