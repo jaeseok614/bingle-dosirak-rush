@@ -111,22 +111,22 @@
     },
     portrait: {
       width: 720,
-      height: 1000,
-      center: { x: 360, y: 480 },
+      height: 820,
+      center: { x: 360, y: 390 },
       arena: {
         left: 34,
         right: 686,
-        top: 72,
-        bottom: 850,
+        top: 64,
+        bottom: 690,
         wall: 28,
-        slotTop: 96,
-        slotBottom: 176,
+        slotTop: 82,
+        slotBottom: 154,
         slotGap: 8,
       },
       cannon: {
-        y: 806,
-        dragDistance: 218,
-        baseSpeed: 18.2,
+        y: 650,
+        dragDistance: 170,
+        baseSpeed: 17.4,
       },
     },
   };
@@ -626,7 +626,7 @@
     HEIGHT = layout.height;
     CENTER = { ...layout.center };
     ARENA = { ...layout.arena };
-    PICKUP_ZONE_TOP = ARENA.bottom - (isPortraitLayout() ? 112 : 86);
+    PICKUP_ZONE_TOP = ARENA.bottom - (isPortraitLayout() ? 92 : 86);
     CANNON = createCannonConfig(layout);
     createSlots();
     canvas.width = WIDTH;
@@ -4464,7 +4464,7 @@
     ui.completed.textContent = `${game.completed}`;
     ui.item.textContent = getItemStatusText();
     ui.fever.textContent = getFeverStatusText();
-    ui.skill.textContent = getSkillButtonText();
+    ui.skill.textContent = isPortraitLayout() ? "톡" : getSkillButtonText();
     if (ui.orderHint) {
       ui.orderHint.textContent = getOrderHintText();
     }
