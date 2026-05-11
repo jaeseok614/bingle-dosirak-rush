@@ -1424,6 +1424,32 @@ body.is-debug .action-panel .balance-button {
     pointer-events: none;
   }
 
+  .result-modal,
+  .guide-modal,
+  .shop-modal,
+  .select-modal,
+  .achievement-modal,
+  .balance-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 100;
+    min-height: 100dvh;
+    padding: 12px;
+    overflow: auto;
+    place-items: start center;
+  }
+
+  .result-box,
+  .guide-box,
+  .shop-box,
+  .select-box,
+  .achievement-box,
+  .balance-box {
+    width: min(100%, 420px);
+    max-height: calc(100dvh - 24px);
+    margin: auto 0;
+  }
+
   .mobile-order-hud {
     display: grid;
   }

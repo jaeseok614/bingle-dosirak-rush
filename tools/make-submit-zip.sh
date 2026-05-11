@@ -11,7 +11,7 @@ cp index.html style.css game.js favicon.svg "$stage/"
 cp README.md PROJECT_PROPOSAL.md THIRD_PARTY_NOTICES.md "$stage/"
 cp netlify.toml .nojekyll "$stage/"
 cp -R assets vendor "$stage/"
-cp tools/browser-smoke.mjs "$stage/tools/"
+cp tools/browser-smoke.mjs tools/make-submit-zip.sh "$stage/tools/"
 
 if command -v zip >/dev/null 2>&1; then
   (
