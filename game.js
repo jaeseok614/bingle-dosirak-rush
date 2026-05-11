@@ -4570,10 +4570,20 @@
 
     ctx.save();
     ctx.fillStyle = "#18312b";
-    ctx.font = "950 16px system-ui, sans-serif";
+    ctx.font = "950 15px system-ui, sans-serif";
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
-    ctx.fillText("보관함 · 탭해서 장전", CENTER.x, rects[0].y - 16);
+    ctx.fillText("보관함", CENTER.x - 46, rects[0].y - 16);
+
+    ctx.fillStyle = "rgba(44, 154, 160, 0.14)";
+    ctx.strokeStyle = "rgba(44, 154, 160, 0.34)";
+    ctx.lineWidth = 2;
+    roundRect(CENTER.x + 2, rects[0].y - 27, 88, 22, 11);
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = "#1f5145";
+    ctx.font = "950 12px system-ui, sans-serif";
+    ctx.fillText("탭=교체", CENTER.x + 46, rects[0].y - 16);
     ctx.restore();
 
     for (const rect of rects) {
