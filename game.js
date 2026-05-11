@@ -107,9 +107,12 @@
   const MAX_PIECES = 16;
   const BASE_SPAWN_SECONDS = 1.85;
   const FEVER_SPAWN_SECONDS = 1.15;
-  const STARTER_PIECES = 8;
+  const STARTER_PIECES = 6;
   const MAX_FOOD_LEVEL = 3;
   const LAUNCH_PAD_COOLDOWN_MS = 520;
+  const LAUNCH_PAD_MERGE_REFRESH_MS = 3200;
+  const PLAYER_MERGE_WINDOW_MS = 2600;
+  const MERGE_MIN_RELATIVE_SPEED = 1.1;
   const MAX_TIME_BONUS = 8;
   const TAU = Math.PI * 2;
   const FIT_TEXT_SELECTOR = [
@@ -501,7 +504,7 @@
       y: CENTER.y + 220,
       angle: 0.22,
       swing: -0.62,
-      hitRadius: 248,
+      hitRadius: 292,
     },
     right: {
       direction: "right",
@@ -510,7 +513,7 @@
       y: CENTER.y + 220,
       angle: -0.22,
       swing: 0.62,
-      hitRadius: 248,
+      hitRadius: 292,
     },
   };
 
@@ -711,7 +714,7 @@
     });
     game.world = game.engine.world;
     game.engine.gravity.y = 1;
-    game.engine.gravity.scale = 0.00135;
+    game.engine.gravity.scale = 0.00112;
 
     Events.on(game.engine, "collisionStart", (event) => {
       for (const pair of event.pairs) {
@@ -1077,6 +1080,7 @@
 
     unlockAudio();
     markFirstInput();
+    const hitAt = performance.now();
     game.skillCooldown = SKILL_COOLDOWN * getCharacterStats().skillCooldown;
     game.itemMessage = "톡!";
     game.itemMessageTimer = 1.2;
@@ -1091,6 +1095,7 @@
       });
       Body.setAngularVelocity(piece.body, randomRange(-0.22, 0.22));
       piece.bump = 0.18;
+      markPlayerHit(piece, hitAt);
     }
 
     burst(CENTER.x, CENTER.y, "#2c9aa0", 24);
@@ -1108,6 +1113,7 @@
     const spec = FLIPPER_SPECS[direction];
     const side = spec.side;
     const stats = getCharacterStats();
+    const hitAt = performance.now();
     const pivot = {
       x: spec.x,
       y: spec.y,
@@ -1121,17 +1127,18 @@
       const distance = Math.hypot(dx, dy);
       const inSide = side < 0 ? body.position.x < CENTER.x + 132 : body.position.x > CENTER.x - 132;
       const inBottomGap = Math.abs(body.position.x - CENTER.x) < 118 && body.position.y > CENTER.y + 118;
-      if ((!inSide && !inBottomGap) || distance > spec.hitRadius || body.position.y < CENTER.y + 16) continue;
+      if ((!inSide && !inBottomGap) || distance > spec.hitRadius || body.position.y < CENTER.y - 22) continue;
 
-      const lift = (inBottomGap ? 12.4 : 10.6) * stats.rotate;
-      const sideKick = -side * (4.15 + piece.level * 0.26);
+      const lift = (inBottomGap ? 18.4 : 15.8) * stats.rotate;
+      const sideKick = -side * (5.25 + piece.level * 0.32);
       const spread = inBottomGap ? randomRange(-0.85, 0.85, game.orderRng) : (body.position.x - CENTER.x) * 0.003;
       Body.setVelocity(body, {
-        x: body.velocity.x * 0.22 + (sideKick + spread) * stats.rotate,
-        y: body.velocity.y * 0.12 - lift,
+        x: body.velocity.x * 0.16 + (sideKick + spread) * stats.rotate,
+        y: Math.min(body.velocity.y * 0.06 - lift, -13.8),
       });
       Body.setAngularVelocity(body, randomRange(-0.28, 0.28));
       piece.bump = 0.18;
+      markPlayerHit(piece, hitAt);
       hitCount += 1;
     }
 
@@ -1151,15 +1158,24 @@
     setCharacterReaction("출발!", "happy", 1.1);
   }
 
+  function markPlayerHit(piece, timestamp = performance.now()) {
+    if (piece) {
+      piece.lastPlayerHitAt = timestamp;
+    }
+  }
+
   function triggerLaunchPad(piece, pad) {
     if (!game.running || piece.scored || piece.merging) return;
 
     const now = performance.now();
     if (now - piece.lastLaunchAt < LAUNCH_PAD_COOLDOWN_MS) return;
     piece.lastLaunchAt = now;
+    if (piece.lastPlayerHitAt && now - piece.lastPlayerHitAt < LAUNCH_PAD_MERGE_REFRESH_MS) {
+      markPlayerHit(piece, now);
+    }
 
     const angle = -Math.PI / 2 + randomRange(-0.54, 0.54, game.orderRng);
-    const speed = randomRange(10.2, 13.4, game.orderRng) / (1 + piece.level * 0.04);
+    const speed = randomRange(15.8, 19.4, game.orderRng) / (1 + piece.level * 0.04);
     Body.setVelocity(piece.body, {
       x: piece.body.velocity.x * 0.22 + Math.cos(angle) * speed,
       y: piece.body.velocity.y * 0.18 + Math.sin(angle) * speed,
@@ -1363,7 +1379,21 @@
     }
 
     for (let i = 0; i < STARTER_PIECES; i += 1) {
-      spawnIngredient(starters[i], i, STARTER_PIECES, 0);
+      const lane = i - (STARTER_PIECES - 1) / 2;
+      spawnIngredient(
+        starters[i],
+        i,
+        STARTER_PIECES,
+        0,
+        {
+          x: CENTER.x + lane * 64 + randomRange(-12, 12, game.orderRng),
+          y: ARENA.bottom - 92 + randomRange(-24, 10, game.orderRng),
+        },
+        {
+          x: randomRange(-0.4, 0.4, game.orderRng),
+          y: randomRange(-0.4, 0.2, game.orderRng),
+        },
+      );
     }
   }
 
@@ -1394,6 +1424,7 @@
       forbiddenHold: 0,
       bump: 0,
       lastLaunchAt: 0,
+      lastPlayerHitAt: 0,
       scored: false,
       merging: false,
       bornAt: performance.now(),
@@ -1432,8 +1463,19 @@
       !b.merging &&
       a.type === b.type &&
       a.level === b.level &&
-      a.level < MAX_FOOD_LEVEL
+      a.level < MAX_FOOD_LEVEL &&
+      isPlayerDrivenMerge(a, b)
     );
+  }
+
+  function isPlayerDrivenMerge(a, b) {
+    const now = performance.now();
+    const recentHit = Math.max(a.lastPlayerHitAt || 0, b.lastPlayerHitAt || 0);
+    if (recentHit <= 0 || now - recentHit > PLAYER_MERGE_WINDOW_MS) return false;
+
+    const rvx = a.body.velocity.x - b.body.velocity.x;
+    const rvy = a.body.velocity.y - b.body.velocity.y;
+    return Math.hypot(rvx, rvy) >= MERGE_MIN_RELATIVE_SPEED;
   }
 
   function processMerges() {
@@ -2015,6 +2057,7 @@
   }
 
   function resetPiece(piece) {
+    piece.lastPlayerHitAt = 0;
     Body.setPosition(piece.body, {
       x: CENTER.x + randomRange(-88, 88),
       y: ARENA.top + 218 + randomRange(-20, 20),
@@ -3180,7 +3223,8 @@
   }
 
   function getSlotForBody(body) {
-    if (body.position.y < ARENA.slotTop || body.position.y > ARENA.slotBottom) return null;
+    const extra = body.circleRadius * 0.9;
+    if (body.position.y < ARENA.slotTop - extra || body.position.y > ARENA.slotBottom + extra) return null;
 
     for (const slot of SLOTS) {
       if (body.position.x >= slot.left && body.position.x <= slot.right) {
