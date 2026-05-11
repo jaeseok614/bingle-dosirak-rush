@@ -18,6 +18,21 @@ if command -v zip >/dev/null 2>&1; then
     cd "$stage"
     zip -r -FS "$out_abs" .
   )
+elif command -v python3 >/dev/null 2>&1; then
+  STAGE="$stage" OUT="$out_abs" python3 - <<'PY'
+import os
+import zipfile
+
+stage = os.environ["STAGE"]
+out = os.environ["OUT"]
+
+with zipfile.ZipFile(out, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+    for root, _, files in os.walk(stage):
+        for name in sorted(files):
+            path = os.path.join(root, name)
+            rel = os.path.relpath(path, stage).replace(os.sep, "/")
+            archive.write(path, rel)
+PY
 elif command -v powershell.exe >/dev/null 2>&1 && command -v wslpath >/dev/null 2>&1; then
   stage_win="$(wslpath -w "$stage")"
   out_win="$(wslpath -w "$PWD/$out")"
