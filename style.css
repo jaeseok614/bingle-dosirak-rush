@@ -509,6 +509,96 @@ h1 {
   line-height: 1;
 }
 
+.mobile-ammo-dock {
+  display: none;
+}
+
+.ammo-status {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.ammo-status > div,
+.mobile-stash-buttons button,
+.mobile-merge-button {
+  min-width: 0;
+  border-radius: 8px;
+  border: 1px solid rgba(47, 109, 91, 0.16);
+  background: #f7fbf2;
+}
+
+.ammo-status > div {
+  padding: 8px;
+}
+
+.ammo-status span,
+.stash-title {
+  display: block;
+  color: var(--muted);
+  font-size: 0.68rem;
+  font-weight: 900;
+}
+
+.ammo-status strong {
+  display: block;
+  margin-top: 2px;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--ink);
+  font-size: 0.95rem;
+  font-weight: 950;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mobile-stash-buttons {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 7px;
+}
+
+.mobile-stash-buttons button {
+  min-height: 58px;
+  padding: 6px 4px;
+  color: var(--ink);
+  background: #fffaf0;
+  font-size: 0.72rem;
+  font-weight: 950;
+  line-height: 1.12;
+  white-space: pre-line;
+}
+
+.mobile-stash-buttons button.is-needed {
+  background: #fff1b6;
+  border-color: rgba(241, 196, 83, 0.88);
+  box-shadow: 0 0 0 3px rgba(241, 196, 83, 0.22);
+  animation: stashPulse 680ms ease-in-out infinite alternate;
+}
+
+.mobile-merge-button {
+  min-height: 38px;
+  color: #ffffff;
+  background: var(--teal);
+  font-size: 0.78rem;
+  font-weight: 950;
+}
+
+.mobile-merge-button:disabled {
+  color: var(--muted);
+  background: #eef1ea;
+}
+
+@keyframes stashPulse {
+  from {
+    transform: translateY(0);
+  }
+
+  to {
+    transform: translateY(-2px);
+  }
+}
+
 .character-hud {
   position: absolute;
   right: 16px;
@@ -1501,8 +1591,8 @@ body.is-debug .action-panel .balance-button {
 
   .app-shell {
     width: 100vw;
-    padding: 8px 0 16px;
-    gap: 8px;
+    padding: 6px 0 86px;
+    gap: 6px;
   }
 
   .top-bar,
@@ -1513,16 +1603,39 @@ body.is-debug .action-panel .balance-button {
 
   .stats-grid {
     grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 4px;
+  }
+
+  .stat-cell {
+    min-height: 0;
+    padding: 5px 4px;
+  }
+
+  .stat-cell span {
+    font-size: 0.56rem;
+  }
+
+  .stat-cell strong {
+    font-size: 0.78rem;
+  }
+
+  .brand-block {
+    gap: 7px;
   }
 
   .brand-mark {
-    width: 48px;
-    height: 48px;
-    border-radius: 14px;
+    width: 34px;
+    height: 34px;
+    border-width: 3px;
+    border-radius: 10px;
+  }
+
+  h1 {
+    font-size: 1.08rem;
   }
 
   .order-panel {
-    padding: 14px;
+    display: none;
   }
 
   .stage-panel {
@@ -1534,15 +1647,76 @@ body.is-debug .action-panel .balance-button {
 
   #gameCanvas {
     width: 100vw;
-    height: clamp(340px, 94vw, 410px);
-    aspect-ratio: auto;
+    height: auto;
   }
 
   .mobile-order-hud {
-    top: 7px;
+    top: 5px;
+    left: 5px;
+    width: calc(100% - 10px);
+    gap: 2px;
+    padding: 6px 8px;
+  }
+
+  .mobile-order-hud span {
+    font-size: 0.58rem;
+  }
+
+  .mobile-order-hud strong {
+    font-size: 0.78rem;
+    line-height: 1.12;
+    white-space: normal;
+  }
+
+  .mobile-hud-meta {
+    display: none;
+  }
+
+  .mobile-ammo-dock {
+    order: 2;
+    display: grid;
+    gap: 8px;
+    margin-inline: 0;
+    padding: 10px;
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.88);
+    border: 1px solid rgba(24, 49, 43, 0.12);
+    box-shadow: 0 10px 22px rgba(24, 49, 43, 0.12);
+  }
+
+  .action-panel {
+    position: fixed;
     left: 7px;
-    width: min(320px, calc(100% - 14px));
-    padding: 8px 10px;
+    right: 7px;
+    bottom: max(7px, env(safe-area-inset-bottom));
+    z-index: 20;
+    order: 3;
+    display: grid;
+    grid-template-columns: 1.25fr 1fr 1fr 1fr;
+    gap: 6px;
+    padding: 7px;
+    border-radius: 14px;
+    background: rgba(255, 255, 255, 0.92);
+    border: 1px solid rgba(24, 49, 43, 0.12);
+    box-shadow: 0 -8px 24px rgba(24, 49, 43, 0.14);
+  }
+
+  .action-panel .secondary-button {
+    min-height: 42px;
+    padding: 6px 4px;
+    border-radius: 10px;
+    font-size: 0.72rem;
+    font-weight: 950;
+  }
+
+  .skill-button {
+    position: static;
+    width: auto;
+    height: auto;
+    min-height: 42px;
+    border-radius: 10px;
+    box-shadow: none;
+    font-size: 0.82rem;
   }
 
   .character-hud {

@@ -32,6 +32,11 @@
     mobileTimeText: document.querySelector("#mobileTimeText"),
     mobileScoreText: document.querySelector("#mobileScoreText"),
     mobileComboText: document.querySelector("#mobileComboText"),
+    mobileAmmoDock: document.querySelector("#mobileAmmoDock"),
+    mobileCurrentAmmo: document.querySelector("#mobileCurrentAmmo"),
+    mobileNextAmmo: document.querySelector("#mobileNextAmmo"),
+    mobileStashButtons: [...document.querySelectorAll("[data-mobile-stash-index]")],
+    mobileStashMerge: document.querySelector("#mobileStashMergeButton"),
     missionList: document.querySelector("#missionList"),
     restart: document.querySelector("#restartButton"),
     guide: document.querySelector("#guideButton"),
@@ -83,19 +88,53 @@
     controls: [...document.querySelectorAll(".control-button, .touch-zone")],
   };
 
-  const WIDTH = 900;
-  const HEIGHT = 720;
-  const CENTER = { x: WIDTH / 2, y: 348 };
-  const ARENA = {
-    left: 92,
-    right: 808,
-    top: 66,
-    bottom: 620,
-    wall: 32,
-    slotTop: 90,
-    slotBottom: 198,
-    slotGap: 10,
+  const LAYOUTS = {
+    desktop: {
+      width: 900,
+      height: 720,
+      center: { x: 450, y: 348 },
+      arena: {
+        left: 92,
+        right: 808,
+        top: 66,
+        bottom: 620,
+        wall: 32,
+        slotTop: 90,
+        slotBottom: 198,
+        slotGap: 10,
+      },
+      cannon: {
+        y: 576,
+        dragDistance: 190,
+        baseSpeed: 17.8,
+      },
+    },
+    portrait: {
+      width: 720,
+      height: 1000,
+      center: { x: 360, y: 480 },
+      arena: {
+        left: 34,
+        right: 686,
+        top: 72,
+        bottom: 850,
+        wall: 28,
+        slotTop: 96,
+        slotBottom: 176,
+        slotGap: 8,
+      },
+      cannon: {
+        y: 806,
+        dragDistance: 218,
+        baseSpeed: 18.2,
+      },
+    },
   };
+  let layoutMode = "desktop";
+  let WIDTH = LAYOUTS.desktop.width;
+  let HEIGHT = LAYOUTS.desktop.height;
+  let CENTER = { ...LAYOUTS.desktop.center };
+  let ARENA = { ...LAYOUTS.desktop.arena };
   const GAME_SECONDS = 60;
   const LEADERBOARD_KEY = "bingle-dosirak-rush-leaderboard";
   const DAILY_LEADERBOARD_KEY = "bingle-dosirak-rush-daily";
@@ -149,7 +188,7 @@
   const SHOT_DIRECT_MERGE_MS = 2600;
   const SHOT_CHAIN_TARGET = 3;
   const AMMO_STASH_SIZE = 4;
-  const PICKUP_ZONE_TOP = ARENA.bottom - 86;
+  let PICKUP_ZONE_TOP = ARENA.bottom - 86;
   const PICKUP_SETTLE_SECONDS = 0.52;
   const PICKUP_MAX_SPEED = 0.62;
   const PICKUP_GRACE_MS = 850;
@@ -527,15 +566,8 @@
     shrimp: ["새우", "튀김", "새볶", "해물"],
   };
   const LEVEL_SCORE = [0, 180, 420, 920];
-  const SLOT_WIDTH = (ARENA.right - ARENA.left - ARENA.slotGap * (FOOD_KEYS.length + 1)) / FOOD_KEYS.length;
-  const SLOTS = FOOD_KEYS.map((type, index) => ({
-    type,
-    index,
-    left: ARENA.left + ARENA.slotGap + index * (SLOT_WIDTH + ARENA.slotGap),
-    right: ARENA.left + ARENA.slotGap + index * (SLOT_WIDTH + ARENA.slotGap) + SLOT_WIDTH,
-    x: ARENA.left + ARENA.slotGap + index * (SLOT_WIDTH + ARENA.slotGap) + SLOT_WIDTH / 2,
-    y: (ARENA.slotTop + ARENA.slotBottom) / 2,
-  }));
+  let SLOT_WIDTH = 0;
+  let SLOTS = [];
 
   const LAUNCH_PAD_LAYOUT = [
     { x: -178, y: -58, radius: 25, color: "#2c9aa0", edge: "#17646d" },
@@ -544,22 +576,64 @@
     { x: 120, y: 126, radius: 25, color: "#e85d4f", edge: "#9c302c" },
   ];
   const BOOSTER_DIRECTIONS = [-Math.PI / 2, -2.35, -0.79, Math.PI, 0, 2.35, 0.79, Math.PI / 2];
-  const CANNON = {
-    x: CENTER.x,
-    y: ARENA.bottom - 44,
-    minAngle: -2.58,
-    maxAngle: -0.56,
-    defaultAngle: -Math.PI / 2,
-    leftAngle: -1.95,
-    rightAngle: -1.19,
-    minPower: 0.54,
-    presetPower: 0.92,
-    maxPower: 1,
-    dragDistance: 190,
-    chargeSeconds: 0.95,
-    baseSpeed: 17.8,
-    reloadSeconds: 0.28,
-  };
+  let CANNON = createCannonConfig(LAYOUTS.desktop);
+
+  function getLayoutMode() {
+    return window.matchMedia("(max-width: 640px) and (orientation: portrait)").matches
+      ? "portrait"
+      : "desktop";
+  }
+
+  function isPortraitLayout() {
+    return layoutMode === "portrait";
+  }
+
+  function createCannonConfig(layout) {
+    return {
+      x: layout.center.x,
+      y: layout.cannon?.y ?? layout.arena.bottom - 44,
+      minAngle: -2.58,
+      maxAngle: -0.56,
+      defaultAngle: -Math.PI / 2,
+      leftAngle: -1.95,
+      rightAngle: -1.19,
+      minPower: 0.54,
+      presetPower: 0.92,
+      maxPower: 1,
+      dragDistance: layout.cannon?.dragDistance ?? 190,
+      chargeSeconds: 0.95,
+      baseSpeed: layout.cannon?.baseSpeed ?? 17.8,
+      reloadSeconds: 0.28,
+    };
+  }
+
+  function createSlots() {
+    SLOT_WIDTH = (ARENA.right - ARENA.left - ARENA.slotGap * (FOOD_KEYS.length + 1)) / FOOD_KEYS.length;
+    SLOTS = FOOD_KEYS.map((type, index) => ({
+      type,
+      index,
+      left: ARENA.left + ARENA.slotGap + index * (SLOT_WIDTH + ARENA.slotGap),
+      right: ARENA.left + ARENA.slotGap + index * (SLOT_WIDTH + ARENA.slotGap) + SLOT_WIDTH,
+      x: ARENA.left + ARENA.slotGap + index * (SLOT_WIDTH + ARENA.slotGap) + SLOT_WIDTH / 2,
+      y: (ARENA.slotTop + ARENA.slotBottom) / 2,
+    }));
+  }
+
+  function applyLayout() {
+    layoutMode = getLayoutMode();
+    const layout = LAYOUTS[layoutMode] || LAYOUTS.desktop;
+    WIDTH = layout.width;
+    HEIGHT = layout.height;
+    CENTER = { ...layout.center };
+    ARENA = { ...layout.arena };
+    PICKUP_ZONE_TOP = ARENA.bottom - (isPortraitLayout() ? 112 : 86);
+    CANNON = createCannonConfig(layout);
+    createSlots();
+    canvas.width = WIDTH;
+    canvas.height = HEIGHT;
+    canvas.style.aspectRatio = `${WIDTH} / ${HEIGHT}`;
+    document.body.classList.toggle("is-portrait-layout", isPortraitLayout());
+  }
 
   const ITEMS = {
     clock: {
@@ -763,6 +837,7 @@
     if (!DEBUG_MODE && ui.balanceButton) {
       ui.balanceButton.hidden = true;
     }
+    applyLayout();
     createEngine();
     bindControls();
     updateMetaUi();
@@ -922,7 +997,21 @@
     ui.start.addEventListener("click", () => closeGuide({ skipTutorial: true }));
     ui.playAgain.addEventListener("click", () => startGame({ skipTutorial: true }));
     ui.copyResult.addEventListener("click", copyResultText);
+    ui.mobileAmmoDock?.addEventListener("click", handleMobileAmmoDockClick);
+    ui.mobileStashMerge?.addEventListener("click", () => {
+      unlockAudio();
+      mergeBestStashAmmo();
+    });
     window.addEventListener("resize", scheduleFitText);
+  }
+
+  function handleMobileAmmoDockClick(event) {
+    const button = event.target.closest("[data-mobile-stash-index]");
+    if (!button) return;
+
+    event.preventDefault();
+    unlockAudio();
+    selectAmmoFromStash(Number(button.dataset.mobileStashIndex));
   }
 
   function buildTray() {
@@ -1597,7 +1686,7 @@
       .filter((piece) => piece.pickupReady && !piece.scored && !piece.merging)
       .map((piece) => {
         const distance = Math.hypot(piece.body.position.x - point.x, piece.body.position.y - point.y);
-        const tapRadius = Math.max(52, piece.body.circleRadius + 32);
+        const tapRadius = getPickupTapRadius(piece);
         return { piece, distance, tapRadius };
       })
       .sort((a, b) => a.distance - b.distance);
@@ -1605,7 +1694,7 @@
     const directTarget = readyPieces.find(({ distance, tapRadius }) => distance <= tapRadius)?.piece;
     const zoneTarget =
       point.y >= PICKUP_ZONE_TOP - 26 && point.y <= ARENA.bottom + 34
-        ? readyPieces.find(({ distance }) => distance <= 240)?.piece
+        ? readyPieces.find(({ distance }) => distance <= (isPortraitLayout() ? 280 : 240))?.piece
         : null;
     const target = directTarget || zoneTarget;
 
@@ -1613,6 +1702,13 @@
 
     collectPieceToAmmo(target, true);
     return true;
+  }
+
+  function getPickupTapRadius(piece) {
+    return Math.max(
+      isPortraitLayout() ? 62 : 52,
+      piece.body.circleRadius + (isPortraitLayout() ? 38 : 32),
+    );
   }
 
   function markFirstInput() {
@@ -1905,7 +2001,7 @@
     return {
       ...base,
       name: getFoodName(type, safeLevel),
-      radius: base.radius + safeLevel * 7,
+      radius: base.radius + safeLevel * 7 + (isPortraitLayout() ? 4 : 0),
       density: base.density * (0.9 + safeLevel * 0.08),
       level: safeLevel,
     };
@@ -2881,6 +2977,12 @@
     if (game.ammoHintShown) return;
 
     game.ammoHintShown = true;
+    if (isPortraitLayout()) {
+      showFloatingText("아래 보관함 탭!", CANNON.x, CANNON.y - 112, "#f1c453", 26);
+      setCharacterReaction("보관함을 눌러 장전", "happy", 1.6);
+      return;
+    }
+
     const rect = getAmmoSlotRects()[0];
     showFloatingText("탭해서 장전!", rect.centerX, rect.y - 12, "#f1c453", 26);
     setCharacterReaction("보관함을 눌러 장전", "happy", 1.6);
@@ -4370,6 +4472,7 @@
     updateModeAndRuleUi();
     updateMetaUi();
     updateMobileHud();
+    renderMobileAmmoDock();
 
     if (!force) {
       scheduleFitText();
@@ -4436,6 +4539,37 @@
     ui.mobileScoreText.textContent = `${Math.round(game.score).toLocaleString("ko-KR")}점`;
     ui.mobileComboText.textContent = `x${game.combo}`;
     ui.mobileOrderHud.classList.toggle("is-paused", game.awaitingFirstInput);
+  }
+
+  function renderMobileAmmoDock() {
+    if (!ui.mobileAmmoDock) return;
+
+    const current = getCurrentCannonAmmo();
+    const next = getNextCannonAmmo();
+    ui.mobileCurrentAmmo.textContent = current ? getFoodName(current.type, current.level) : "-";
+    ui.mobileNextAmmo.textContent = next ? getFoodName(next.type, next.level) : "-";
+
+    for (const button of ui.mobileStashButtons) {
+      const index = Number(button.dataset.mobileStashIndex);
+      const ammo = game.ammoStash[index];
+      const useful = ammo && isAmmoUsefulForCurrentOrder(ammo.type, ammo.level);
+      button.classList.toggle("is-needed", Boolean(useful));
+      button.disabled = !game.started || game.timeLeft <= 0 || !ammo || !ui.guideOverlay.hidden || !ui.modal.hidden;
+      button.textContent = ammo
+        ? `${getFoodName(ammo.type, ammo.level)}${useful ? "\n배송!" : ""}`
+        : "비움";
+      button.setAttribute(
+        "aria-label",
+        ammo
+          ? `${getFoodName(ammo.type, ammo.level)}${useful ? " 배송 가능" : ""} 장전`
+          : "빈 보관함",
+      );
+    }
+    if (ui.mobileStashMerge) {
+      const canMerge = Boolean(findBestStashMerge());
+      ui.mobileStashMerge.disabled =
+        !game.started || game.timeLeft <= 0 || !canMerge || !ui.guideOverlay.hidden || !ui.modal.hidden;
+    }
   }
 
   function scheduleFitText() {
@@ -4682,7 +4816,9 @@
     drawTray();
     drawLaunchPads();
     drawCannon();
-    drawAmmoStash();
+    if (!isPortraitLayout()) {
+      drawAmmoStash();
+    }
     drawPowerItems();
     drawPieces();
     drawParticles();

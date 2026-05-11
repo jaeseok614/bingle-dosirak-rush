@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>빙글도시락 러시</title>
     <link rel="icon" href="favicon.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="style.css?v=20260511-final" />
+    <link rel="stylesheet" href="style.css?v=20260511-mobile-layout" />
   </head>
   <body>
     <main class="app-shell" aria-label="빙글도시락 러시">
@@ -268,6 +268,27 @@
           </div>
         </section>
 
+        <section id="mobileAmmoDock" class="mobile-ammo-dock" aria-label="모바일 장전대">
+          <div class="ammo-status">
+            <div>
+              <span>현재탄</span>
+              <strong id="mobileCurrentAmmo">-</strong>
+            </div>
+            <div>
+              <span>다음탄</span>
+              <strong id="mobileNextAmmo">-</strong>
+            </div>
+          </div>
+          <div class="stash-title">보관함 · 탭해서 장전</div>
+          <div class="mobile-stash-buttons">
+            <button type="button" data-mobile-stash-index="0">비움</button>
+            <button type="button" data-mobile-stash-index="1">비움</button>
+            <button type="button" data-mobile-stash-index="2">비움</button>
+            <button type="button" data-mobile-stash-index="3">비움</button>
+          </div>
+          <button id="mobileStashMergeButton" class="mobile-merge-button" type="button">보관함 합치기</button>
+        </section>
+
         <aside class="action-panel" aria-label="조작">
           <button id="skillButton" class="secondary-button skill-button" type="button">톡 치기</button>
           <button id="restartButton" class="secondary-button" type="button">재시작</button>
@@ -278,6 +299,6 @@
     </main>
 
     <script src="vendor/matter.min.js"></script>
-    <script src="game.js"></script>
+    <script src="game.js?v=20260511-mobile-layout"></script>
   </body>
 </html>
