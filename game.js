@@ -81,7 +81,7 @@
   };
 
   const WIDTH = 900;
-  const HEIGHT = 680;
+  const HEIGHT = 720;
   const CENTER = { x: WIDTH / 2, y: 348 };
   const ARENA = {
     left: 92,
@@ -151,6 +151,7 @@
   const PICKUP_MAX_SPEED = 0.62;
   const PICKUP_GRACE_MS = 850;
   const DELIVERY_READY_MS = 5200;
+  const TUTORIAL_KEY = "bingle-dosirak-rush-tutorial";
   const TAU = Math.PI * 2;
   const FIT_TEXT_SELECTOR = [
     ".stat-cell strong",
@@ -567,7 +568,7 @@
       icon: "x",
     },
     magnet: {
-      name: "자석 젓가락",
+      name: "자석 키트",
       short: "자석",
       color: "#f1c453",
       edge: "#9b7423",
@@ -704,6 +705,8 @@
     newAchievements: [],
     lastCoinAward: 0,
     lastShareText: "",
+    tutorialActive: false,
+    tutorialStep: 0,
     trayAngle: 0,
     trayVelocity: 0,
     cannon: {
@@ -745,6 +748,7 @@
   }
 
   function init() {
+    document.body.classList.toggle("is-debug", DEBUG_MODE);
     if (!DEBUG_MODE) {
       ui.balanceButton.hidden = true;
     }
@@ -1090,6 +1094,8 @@
     game.lastCoinAward = 0;
     game.lastShareText = "";
     game.ammoHintShown = false;
+    game.tutorialActive = shouldRun && !isTutorialComplete();
+    game.tutorialStep = 0;
     game.trayAngle = 0;
     game.trayVelocity = 0;
     resetCannonLoad();
@@ -1447,7 +1453,7 @@
     const gap = 10;
     const totalWidth = AMMO_STASH_SIZE * width + (AMMO_STASH_SIZE - 1) * gap;
     const startX = CENTER.x - totalWidth / 2;
-    const y = ARENA.bottom + 25;
+    const y = HEIGHT - 70;
 
     return Array.from({ length: AMMO_STASH_SIZE }, (_, index) => ({
       index,
@@ -4156,8 +4162,77 @@
     return "톡!";
   }
 
+  function isTutorialComplete() {
+    try {
+      return window.localStorage.getItem(TUTORIAL_KEY) === "1";
+    } catch {
+      return false;
+    }
+  }
+
+  function markTutorialComplete() {
+    if (!game.tutorialActive) return;
+
+    game.tutorialActive = false;
+    game.tutorialStep = 4;
+    try {
+      window.localStorage.setItem(TUTORIAL_KEY, "1");
+    } catch {
+      // Tutorial progress is optional local state.
+    }
+    showFloatingText("좋아요! 60초 러시 시작", CENTER.x, CENTER.y - 90, "#2c9aa0", 34);
+  }
+
+  function updateTutorialState() {
+    if (!game.tutorialActive) return;
+
+    if (game.tutorialStep === 0 && game.cannon.shotCount > 0) {
+      game.tutorialStep = 1;
+    }
+    if (game.tutorialStep === 1 && game.runStats.mergeCount > 0) {
+      game.tutorialStep = 2;
+    }
+    if (game.tutorialStep === 2 && game.cannon.loadedFromStashAt > 0) {
+      game.tutorialStep = 3;
+    }
+    if (game.tutorialStep === 3 && game.completed > 0) {
+      markTutorialComplete();
+    }
+  }
+
+  function getTutorialMessage() {
+    if (!game.tutorialActive) return null;
+
+    if (game.tutorialStep === 0) {
+      return {
+        title: "1/4 꾹 눌러 발사",
+        body: "화면을 누르면 힘 게이지가 찹니다. 방향을 맞추고 손을 떼세요.",
+      };
+    }
+    if (game.tutorialStep === 1) {
+      return {
+        title: "2/4 같은 재료 합체",
+        body: "같은 재료를 맞추면 한 단계 커집니다.",
+      };
+    }
+    if (game.tutorialStep === 2) {
+      const hasUsefulAmmo = game.ammoStash.some((ammo) => ammo && isAmmoUsefulForCurrentOrder(ammo.type, ammo.level));
+      return {
+        title: hasUsefulAmmo ? "3/4 배송! 칸 장전" : "3/4 아래 회수대",
+        body: hasUsefulAmmo
+          ? "노란 보관함 칸을 탭하면 현재탄과 교체됩니다."
+          : "아래에서 멈춘 재료는 보관함으로 들어갑니다.",
+      };
+    }
+    return {
+      title: "4/4 위 칸에 배달",
+      body: "현재탄과 같은 색 위쪽 배달칸을 노려 넣으세요.",
+    };
+  }
+
   function draw() {
     ctx.clearRect(0, 0, WIDTH, HEIGHT);
+    updateTutorialState();
     drawBackdrop();
     drawTray();
     drawLaunchPads();
@@ -4167,6 +4242,7 @@
     drawPieces();
     drawParticles();
     drawFloatingTexts();
+    drawTutorialCoach();
     drawFeverOverlay();
   }
 
@@ -4202,6 +4278,29 @@
     ctx.textBaseline = "top";
     ctx.strokeText("피버 2발", WIDTH / 2, 22);
     ctx.fillText("피버 2발", WIDTH / 2, 22);
+    ctx.restore();
+  }
+
+  function drawTutorialCoach() {
+    const message = getTutorialMessage();
+    if (!message || !game.started || game.timeLeft <= 0 || !ui.guideOverlay.hidden || !ui.modal.hidden) return;
+
+    ctx.save();
+    ctx.fillStyle = "rgba(255, 255, 255, 0.9)";
+    ctx.strokeStyle = "rgba(47, 109, 91, 0.26)";
+    ctx.lineWidth = 3;
+    roundRect(CENTER.x - 230, ARENA.slotBottom + 16, 460, 72, 14);
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.fillStyle = "#1f5145";
+    ctx.font = "950 22px system-ui, sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(message.title, CENTER.x, ARENA.slotBottom + 42);
+    ctx.fillStyle = "#62756e";
+    ctx.font = "850 15px system-ui, sans-serif";
+    ctx.fillText(message.body, CENTER.x, ARENA.slotBottom + 66);
     ctx.restore();
   }
 
@@ -4262,6 +4361,9 @@
       const { type, level } = parseOrderKey(id);
       return type === slot.type && (game.progress?.[id] || 0) < amount && needsMore(type, level);
     });
+    const currentAmmo = getCurrentCannonAmmo();
+    const isCurrentTarget =
+      currentAmmo?.type === slot.type && isAmmoUsefulForCurrentOrder(currentAmmo.type, currentAmmo.level);
 
     ctx.save();
     ctx.fillStyle = food.color;
@@ -4274,6 +4376,16 @@
     ctx.lineWidth = isOrdered ? 6 : 3;
     roundRect(bounds.left, ARENA.slotTop, width, height, 12);
     ctx.stroke();
+
+    if (isCurrentTarget) {
+      const pulse = 0.55 + Math.sin(performance.now() / 120) * 0.18;
+      ctx.globalAlpha = pulse;
+      ctx.strokeStyle = "#f1c453";
+      ctx.lineWidth = 9;
+      roundRect(bounds.left - 5, ARENA.slotTop - 5, width + 10, height + 10, 15);
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+    }
 
     if (game.orderRule.id === "forbidden" && slot.type === game.forbiddenType) {
       ctx.fillStyle = "rgba(232, 93, 79, 0.32)";
@@ -4294,7 +4406,33 @@
       ctx.fillStyle = "#e85d4f";
       ctx.strokeText("금지", bounds.x, slot.y + 28);
       ctx.fillText("금지", bounds.x, slot.y + 28);
+    } else if (isCurrentTarget) {
+      ctx.font = "950 19px system-ui, sans-serif";
+      ctx.fillStyle = "#18312b";
+      ctx.strokeStyle = "rgba(255, 255, 255, 0.9)";
+      ctx.lineWidth = 4;
+      ctx.strokeText("여기!", bounds.x, slot.y + 28);
+      ctx.fillText("여기!", bounds.x, slot.y + 28);
     }
+    ctx.restore();
+  }
+
+  function drawSmallBadge(text, x, y, fill = "#244f45", color = "#ffffff") {
+    const width = 48;
+    const height = 20;
+
+    ctx.save();
+    ctx.fillStyle = fill;
+    ctx.strokeStyle = "rgba(255, 255, 255, 0.88)";
+    ctx.lineWidth = 2;
+    roundRect(x - width / 2, y - height / 2, width, height, 10);
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = color;
+    ctx.font = "950 12px system-ui, sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(text, x, y + 0.5);
     ctx.restore();
   }
 
@@ -4374,6 +4512,7 @@
     drawCannonPowerGauge();
 
     if (loadedType) {
+      drawSmallBadge("현재", muzzle.x, muzzle.y - 34, "#2f6d5b");
       drawIngredient({
         type: loadedType,
         level: cannon.loadedLevel || 0,
@@ -4386,6 +4525,7 @@
     }
 
     if (cannon.nextType) {
+      drawSmallBadge("다음", CANNON.x + 70, CANNON.y - 14, "#fff8da", "#18312b");
       ctx.save();
       ctx.globalAlpha = 0.72;
       ctx.translate(CANNON.x + 70, CANNON.y + 28);
@@ -4428,19 +4568,36 @@
   function drawAmmoStash() {
     const rects = getAmmoSlotRects();
 
+    ctx.save();
+    ctx.fillStyle = "#18312b";
+    ctx.font = "950 16px system-ui, sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText("보관함 · 탭해서 장전", CENTER.x, rects[0].y - 16);
+    ctx.restore();
+
     for (const rect of rects) {
       const ammo = game.ammoStash[rect.index];
       const useful = ammo && isAmmoUsefulForCurrentOrder(ammo.type, ammo.level);
+      const pulse = useful ? 0.5 + Math.sin(performance.now() / 130 + rect.index) * 0.22 : 0;
 
       ctx.save();
       ctx.fillStyle = useful ? "#fff8da" : "#f5f8f0";
       ctx.strokeStyle = useful ? "#f1c453" : "rgba(24, 49, 43, 0.22)";
-      ctx.lineWidth = useful ? 4 : 2;
+      ctx.lineWidth = useful ? 4 + pulse * 2 : 2;
       ctx.shadowColor = useful ? "rgba(241, 196, 83, 0.42)" : "rgba(24, 49, 43, 0.16)";
-      ctx.shadowBlur = useful ? 12 : 5;
+      ctx.shadowBlur = useful ? 12 + pulse * 12 : 5;
       roundRect(rect.x, rect.y, rect.width, rect.height, 12);
       ctx.fill();
       ctx.stroke();
+      if (useful) {
+        ctx.globalAlpha = 0.42 + pulse * 0.3;
+        ctx.strokeStyle = "#2c9aa0";
+        ctx.lineWidth = 3;
+        roundRect(rect.x - 5, rect.y - 5, rect.width + 10, rect.height + 10, 15);
+        ctx.stroke();
+        ctx.globalAlpha = 1;
+      }
       ctx.shadowColor = "transparent";
 
       if (!ammo) {

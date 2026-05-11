@@ -14,7 +14,7 @@
           <span class="brand-mark" aria-hidden="true"></span>
           <div>
             <h1>빙글도시락 러시</h1>
-            <p>60초 도시락 물리 액션</p>
+            <p>60초 도시락 캐논 합체 액션</p>
           </div>
         </div>
         <div class="stats-grid" aria-label="게임 상태">
@@ -84,10 +84,10 @@
         </aside>
 
         <section class="stage-panel">
-          <canvas id="gameCanvas" width="900" height="680" aria-label="합체 도시락 게임 화면"></canvas>
+          <canvas id="gameCanvas" width="900" height="720" aria-label="합체 도시락 게임 화면"></canvas>
           <div class="touch-zones" aria-hidden="true">
-            <button class="touch-zone" type="button" data-dir="left" tabindex="-1" aria-label="왼쪽 빠른 발사"></button>
-            <button class="touch-zone" type="button" data-dir="right" tabindex="-1" aria-label="오른쪽 빠른 발사"></button>
+            <button class="touch-zone" type="button" data-dir="left" tabindex="-1" aria-label="왼쪽 보조 자동 조준 발사"></button>
+            <button class="touch-zone" type="button" data-dir="right" tabindex="-1" aria-label="오른쪽 보조 자동 조준 발사"></button>
           </div>
           <div id="mobileOrderHud" class="mobile-order-hud" aria-live="polite">
             <div>
@@ -109,7 +109,7 @@
           </div>
           <div id="guideOverlay" class="guide-modal">
             <div class="guide-box" role="dialog" aria-modal="true" aria-labelledby="guideTitle">
-              <span class="result-kicker">60초 도시락 합체 액션</span>
+              <span class="result-kicker">60초 도시락 캐논 합체 액션</span>
               <h2 id="guideTitle">쏘고, 모으고, 다시 배달</h2>
               <div class="guide-steps">
                 <div class="guide-step">
@@ -196,6 +196,12 @@
                 <button id="copyResultButton" class="secondary-button" type="button">결과 복사</button>
                 <button id="playAgainButton" class="primary-button" type="button">다시 시작</button>
               </div>
+              <div class="result-actions result-secondary-actions" aria-label="부가 기능">
+                <button id="modeButton" class="secondary-button mode-button" type="button">오늘 챌린지</button>
+                <button id="characterButton" class="secondary-button character-button" type="button">캐릭터</button>
+                <button id="shopButton" class="secondary-button shop-button" type="button">상점</button>
+                <button id="achievementButton" class="secondary-button achievement-button" type="button">업적</button>
+              </div>
               <p id="copyStatus" class="copy-status" aria-live="polite"></p>
             </div>
           </div>
@@ -259,17 +265,13 @@
         </section>
 
         <aside class="action-panel" aria-label="조작">
-          <button class="icon-button control-button" type="button" data-dir="left" aria-label="왼쪽 빠른 발사">↖</button>
-          <button class="icon-button control-button" type="button" data-dir="right" aria-label="오른쪽 빠른 발사">↗</button>
+          <button class="icon-button control-button" type="button" data-dir="left" aria-label="왼쪽 보조 자동 조준 발사">↖</button>
+          <button class="icon-button control-button" type="button" data-dir="right" aria-label="오른쪽 보조 자동 조준 발사">↗</button>
           <button id="skillButton" class="secondary-button skill-button" type="button">톡 치기</button>
-          <button id="modeButton" class="secondary-button mode-button" type="button">오늘 챌린지</button>
-          <button id="characterButton" class="secondary-button character-button" type="button">캐릭터</button>
-          <button id="shopButton" class="secondary-button shop-button" type="button">상점</button>
-          <button id="achievementButton" class="secondary-button achievement-button" type="button">업적</button>
-          <button id="balanceButton" class="secondary-button balance-button" type="button">튜닝</button>
-          <button id="soundButton" class="secondary-button sound-button" type="button">사운드 ON</button>
           <button id="restartButton" class="secondary-button" type="button">재시작</button>
           <button id="guideButton" class="secondary-button guide-button" type="button">가이드</button>
+          <button id="soundButton" class="secondary-button sound-button" type="button">사운드 ON</button>
+          <button id="balanceButton" class="secondary-button balance-button" type="button">튜닝</button>
         </aside>
       </section>
     </main>
