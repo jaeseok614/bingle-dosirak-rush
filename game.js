@@ -105,7 +105,7 @@
   const WRONG_HOLD_SECONDS = 1.35;
   const FORBIDDEN_HOLD_SECONDS = 0.9;
   const MAX_PIECES = 16;
-  const STARTER_PIECES = 5;
+  const STARTER_PIECES = 1;
   const MAX_FOOD_LEVEL = 3;
   const LAUNCH_PAD_COOLDOWN_MS = 520;
   const LAUNCH_PAD_MERGE_REFRESH_MS = 3200;
@@ -493,6 +493,7 @@
     { x: -112, y: 96, radius: 24, color: "#6d4c96", edge: "#422b61" },
     { x: 120, y: 126, radius: 25, color: "#e85d4f", edge: "#9c302c" },
   ];
+  const BOOSTER_DIRECTIONS = [-Math.PI / 2, -2.35, -0.79, Math.PI, 0, 2.35, 0.79, Math.PI / 2];
   const CANNON = {
     x: CENTER.x,
     y: ARENA.bottom - 44,
@@ -902,6 +903,9 @@
         }),
         flash: 0,
         phase: index * 1.7,
+        activeTimer: index < 2 ? randomRange(1.8, 3.4, game.itemRng) : 0,
+        respawnTimer: index < 2 ? 0 : randomRange(1.2, 4.2, game.itemRng),
+        directionAngle: pickBoosterDirection(),
       };
       pad.body.plugin.launchPad = pad;
       return pad;
@@ -941,6 +945,10 @@
         true,
       );
     }
+  }
+
+  function pickBoosterDirection() {
+    return BOOSTER_DIRECTIONS[Math.floor(game.itemRng() * BOOSTER_DIRECTIONS.length)] || -Math.PI / 2;
   }
 
   function updatePowerItemBodies() {
@@ -1190,7 +1198,17 @@
     if (!["left", "right"].includes(direction) || !canUseCannon()) return;
 
     unlockAudio();
-    setCannonAim(direction === "left" ? CANNON.leftAngle : CANNON.rightAngle, CANNON.presetPower);
+    const slot = getPrimaryOrderSlot();
+    if (slot) {
+      const sideOffset = direction === "left" ? -SLOT_WIDTH * 0.18 : SLOT_WIDTH * 0.18;
+      const target = {
+        x: clamp(slot.x + sideOffset, ARENA.left + 56, ARENA.right - 56),
+        y: ARENA.slotBottom + 42,
+      };
+      setCannonAim(Math.atan2(target.y - CANNON.y, target.x - CANNON.x), CANNON.presetPower);
+    } else {
+      setCannonAim(direction === "left" ? CANNON.leftAngle : CANNON.rightAngle, CANNON.presetPower);
+    }
     fireCannonFromCurrentAim();
   }
 
@@ -1273,6 +1291,16 @@
     game.cannon.nextType = pickSpawnType();
   }
 
+  function getPrimaryOrderSlot() {
+    const id = Object.keys(game.order || {}).find((key) => {
+      return (game.progress?.[key] || 0) < (game.order?.[key] || 0);
+    });
+    if (!id) return null;
+
+    const { type } = parseOrderKey(id);
+    return SLOTS.find((slot) => slot.type === type) || null;
+  }
+
   function markFirstInput() {
     if (!game.awaitingFirstInput) return;
 
@@ -1288,7 +1316,7 @@
   }
 
   function triggerLaunchPad(piece, pad) {
-    if (!game.running || piece.scored || piece.merging) return;
+    if (!game.running || piece.scored || piece.merging || pad.activeTimer <= 0) return;
 
     const now = performance.now();
     if (now - piece.lastLaunchAt < LAUNCH_PAD_COOLDOWN_MS) return;
@@ -1297,8 +1325,8 @@
       markPlayerHit(piece, now);
     }
 
-    const angle = -Math.PI / 2 + randomRange(-0.54, 0.54, game.orderRng);
-    const speed = randomRange(15.8, 19.4, game.orderRng) / (1 + piece.level * 0.04);
+    const angle = pad.directionAngle;
+    const speed = randomRange(12.6, 17.8, game.orderRng) / (1 + piece.level * 0.04);
     Body.setVelocity(piece.body, {
       x: piece.body.velocity.x * 0.22 + Math.cos(angle) * speed,
       y: piece.body.velocity.y * 0.18 + Math.sin(angle) * speed,
@@ -1306,8 +1334,11 @@
     Body.setAngularVelocity(piece.body, randomRange(-0.42, 0.42, game.orderRng));
     piece.bump = 0.24;
     pad.flash = 0.38;
+    pad.activeTimer = 0;
+    pad.respawnTimer = randomRange(1.4, 3.8, game.itemRng);
+    pad.directionAngle = pickBoosterDirection();
     game.trayVelocity += randomRange(-0.08, 0.08, game.orderRng);
-    game.itemMessage = "발사!";
+    game.itemMessage = "부스터!";
     game.itemMessageTimer = 0.9;
     burst(pad.body.position.x, pad.body.position.y, pad.color, 16);
     playSound("item");
@@ -1878,10 +1909,28 @@
 
     if (!game.running || game.awaitingFirstInput) return;
 
+    for (const pad of game.launchPads) {
+      if (pad.activeTimer > 0) {
+        pad.activeTimer = Math.max(0, pad.activeTimer - dt);
+        if (pad.activeTimer <= 0) {
+          pad.respawnTimer = randomRange(1.4, 4.6, game.itemRng);
+        }
+      } else {
+        pad.respawnTimer = Math.max(0, pad.respawnTimer - dt);
+        if (pad.respawnTimer <= 0) {
+          pad.directionAngle = pickBoosterDirection();
+          pad.activeTimer = randomRange(1.35, 2.55, game.itemRng);
+          pad.flash = 0.24;
+        }
+      }
+    }
+
     for (const piece of game.pieces) {
       if (piece.scored || piece.merging) continue;
 
       for (const pad of game.launchPads) {
+        if (pad.activeTimer <= 0) continue;
+
         const distance = Math.hypot(
           piece.body.position.x - pad.body.position.x,
           piece.body.position.y - pad.body.position.y,
@@ -3736,31 +3785,16 @@
     for (const pad of game.launchPads) {
       const pulse = Math.sin(time + pad.phase) * 2.5;
       const flash = pad.flash / 0.38;
-      const isSafetyPad = Math.abs(pad.x) < 1 && pad.y > 190;
+      const active = pad.activeTimer > 0;
+      const appear = active ? clamp(Math.min(pad.activeTimer, 0.35) / 0.35, 0, 1) : clamp(flash, 0, 1);
+      if (!active && flash <= 0) continue;
 
       ctx.save();
       ctx.translate(pad.body.position.x, pad.body.position.y);
+      ctx.globalAlpha = active ? 0.64 + 0.36 * appear : flash * 0.72;
+      ctx.scale(0.72 + appear * 0.28, 0.72 + appear * 0.28);
       ctx.shadowColor = pad.color;
       ctx.shadowBlur = 10 + flash * 18;
-
-      if (isSafetyPad) {
-        ctx.fillStyle = "rgba(24, 49, 43, 0.92)";
-        ctx.strokeStyle = flash > 0 ? "#ffffff" : pad.edge;
-        ctx.lineWidth = 5;
-        roundRect(-76, -24, 152, 48, 24);
-        ctx.fill();
-        ctx.stroke();
-
-        ctx.strokeStyle = flash > 0 ? "#ffffff" : pad.color;
-        ctx.lineWidth = 4;
-        for (const x of [-34, 0, 34]) {
-          ctx.beginPath();
-          ctx.moveTo(x - 14, 6);
-          ctx.lineTo(x, -10 - flash * 4);
-          ctx.lineTo(x + 14, 6);
-          ctx.stroke();
-        }
-      }
 
       ctx.fillStyle = "#10231f";
       ctx.strokeStyle = pad.edge;
@@ -3778,6 +3812,7 @@
       ctx.stroke();
 
       ctx.fillStyle = flash > 0 ? "#ffffff" : pad.color;
+      ctx.rotate(pad.directionAngle + Math.PI / 2);
       ctx.beginPath();
       ctx.moveTo(0, -pad.radius * 0.62);
       ctx.lineTo(pad.radius * 0.42, 0);
@@ -3788,6 +3823,7 @@
       ctx.lineTo(-pad.radius * 0.42, 0);
       ctx.closePath();
       ctx.fill();
+      ctx.rotate(-(pad.directionAngle + Math.PI / 2));
 
       if (flash > 0) {
         ctx.globalAlpha = flash * 0.7;
