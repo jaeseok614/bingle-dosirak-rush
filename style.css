@@ -790,8 +790,12 @@ h1 {
   background: var(--gold);
 }
 
-.tutorial-coach.is-waiting-action {
+.tutorial-coach.is-waiting-action:not(.is-stash-action) {
   pointer-events: none;
+}
+
+.tutorial-coach.is-stash-action .tutorial-coach-next {
+  font-size: 0.9rem;
 }
 
 body.is-tutorial-coach .action-panel {

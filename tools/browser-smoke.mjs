@@ -366,6 +366,7 @@ async function playGuidedTutorialRun(client) {
         return {
           coachHidden: !coach || coach.hidden,
           nextDisabled: !next || next.disabled,
+          nextText: next?.textContent.trim() || '',
           waitingAction: Boolean(coach?.classList.contains('is-waiting-action')),
           deliveryVisible: Boolean(dock && !dock.hidden && delivery && !delivery.hidden && !delivery.disabled),
           gameOver: !document.querySelector('#gameOver').hidden,
@@ -392,6 +393,12 @@ async function playGuidedTutorialRun(client) {
           return true;
         })()`,
       );
+      await sleep(420);
+      continue;
+    }
+
+    if (!state.nextDisabled && state.nextText === "선택") {
+      await click(client, "#tutorialCoachNext");
       await sleep(420);
       continue;
     }

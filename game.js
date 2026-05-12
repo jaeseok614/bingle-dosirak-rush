@@ -257,7 +257,7 @@
     },
     {
       id: "stashTap",
-      text: "노란 배송! 칸을 눌러봐. 누르면 현재탄으로 바뀌어.",
+      text: "노란 배송! 칸이나 선택 버튼을 눌러봐. 현재탄으로 바뀌어.",
       wait: "stashTap",
       setup: "stashTap",
       highlight: ["deliveryReady"],
@@ -5603,9 +5603,14 @@
 
     const step = getTutorialCoachStep();
     const waitingAction = Boolean(step && step.wait !== "next" && step.wait !== "finish" && game.tutorialActionReady);
-    ui.tutorialCoachNext.disabled = !game.tutorialTextDone || waitingAction;
-    ui.tutorialCoachNext.textContent = step?.wait === "finish" ? "시작" : "→";
-    ui.tutorialCoachNext.setAttribute("aria-label", step?.wait === "finish" ? "본 게임 시작" : "다음");
+    const waitingStashTap = Boolean(step?.wait === "stashTap" && game.tutorialActionReady);
+    ui.tutorialCoach.classList.toggle("is-stash-action", waitingStashTap);
+    ui.tutorialCoachNext.disabled = !game.tutorialTextDone || (waitingAction && !waitingStashTap);
+    ui.tutorialCoachNext.textContent = waitingStashTap ? "선택" : step?.wait === "finish" ? "시작" : "→";
+    ui.tutorialCoachNext.setAttribute(
+      "aria-label",
+      waitingStashTap ? "배송 준비 선택" : step?.wait === "finish" ? "본 게임 시작" : "다음",
+    );
   }
 
   function handleTutorialCoachClick(event) {
@@ -5615,6 +5620,10 @@
     event.stopPropagation();
     if (!game.tutorialTextDone) {
       finishTutorialTyping();
+      return;
+    }
+    if (game.tutorialActionReady && game.tutorialWait === "stashTap") {
+      selectDeliveryReadyAmmo();
       return;
     }
     if (game.tutorialActionReady) return;
