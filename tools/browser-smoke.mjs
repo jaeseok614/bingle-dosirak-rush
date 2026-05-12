@@ -363,12 +363,25 @@ async function playGuidedTutorialRun(client) {
         const next = document.querySelector('#tutorialCoachNext');
         const delivery = document.querySelector('#mobileDeliveryReadyButton');
         const dock = document.querySelector('#mobileAmmoDock');
+        const coachRect = coach?.getBoundingClientRect();
+        const deliveryRect = delivery?.getBoundingClientRect();
+        const deliveryCovered = Boolean(
+          coachRect &&
+            deliveryRect &&
+            deliveryRect.width > 0 &&
+            deliveryRect.height > 0 &&
+            coachRect.left < deliveryRect.right &&
+            coachRect.right > deliveryRect.left &&
+            coachRect.top < deliveryRect.bottom &&
+            coachRect.bottom > deliveryRect.top
+        );
         return {
           coachHidden: !coach || coach.hidden,
           nextDisabled: !next || next.disabled,
           waitingAction: Boolean(coach?.classList.contains('is-waiting-action')),
           deliveryVisible: Boolean(dock && !dock.hidden && delivery && !delivery.hidden && !delivery.disabled),
           deliveryHighlighted: Boolean(delivery?.classList.contains('is-tutorial-target')),
+          deliveryCovered,
           gameOver: !document.querySelector('#gameOver').hidden,
         };
       })()`,
@@ -400,6 +413,9 @@ async function playGuidedTutorialRun(client) {
     if (state.deliveryVisible) {
       if (!state.deliveryHighlighted) {
         throw new Error("Tutorial delivery button was visible but not highlighted");
+      }
+      if (state.deliveryCovered) {
+        throw new Error("Tutorial delivery button was covered by the coach bubble");
       }
       await click(client, "#mobileDeliveryReadyButton");
       await sleep(420);

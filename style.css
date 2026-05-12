@@ -1873,6 +1873,12 @@ body.is-debug .action-panel .balance-button {
     border-radius: 10px;
   }
 
+  .tutorial-coach.is-stash-action {
+    position: fixed;
+    bottom: calc(118px + env(safe-area-inset-bottom));
+    z-index: 18;
+  }
+
   .tutorial-coach-avatar {
     width: 44px;
     height: 44px;

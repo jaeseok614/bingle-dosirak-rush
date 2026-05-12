@@ -5659,7 +5659,9 @@
     ui.tutorialCoach.classList.toggle("is-waiting-action", game.tutorialActionReady);
 
     const step = getTutorialCoachStep();
+    const stashActionStep = Boolean(step?.wait === "stashTap" && game.deliveryReadyAmmo);
     const waitingAction = Boolean(step && step.wait !== "next" && step.wait !== "finish" && game.tutorialActionReady);
+    ui.tutorialCoach.classList.toggle("is-stash-action", stashActionStep);
     ui.tutorialCoachNext.disabled = !game.tutorialTextDone || waitingAction;
     ui.tutorialCoachNext.textContent = step?.wait === "finish" ? "시작" : "→";
     ui.tutorialCoachNext.setAttribute(
