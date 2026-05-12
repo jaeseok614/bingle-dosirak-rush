@@ -58,6 +58,7 @@
     finalRank: document.querySelector("#finalRank"),
     leaderboardTitle: document.querySelector("#leaderboardTitle"),
     leaderboard: document.querySelector("#leaderboardList"),
+    highlightSummary: document.querySelector("#highlightSummary"),
     nextGoal: document.querySelector("#nextGoal"),
     sharePreview: document.querySelector("#sharePreview"),
     copyResult: document.querySelector("#copyResultButton"),
@@ -751,6 +752,7 @@
     powerItems: [],
     particles: [],
     floatingTexts: [],
+    stamps: [],
     ammoStash: [],
     deliveryReadyAmmo: null,
     score: 0,
@@ -1944,6 +1946,7 @@
   function clearParticles() {
     game.particles = [];
     game.floatingTexts = [];
+    game.stamps = [];
   }
 
   function getRushPhase() {
@@ -2466,6 +2469,12 @@
 
     shot.deliveryAwarded = true;
     addScore(score, "order");
+    if (shot.wallBounces > 0) {
+      game.runStats.bingleDeliveries += 1;
+    } else {
+      game.runStats.directDeliveries += 1;
+    }
+    registerHighlight(label.replace(/\s\+\d+$/, ""), score);
     showShotFeedback(label, getSlotCenterX(slot), ARENA.slotTop - 18, color);
     registerShotResult({ x: getSlotCenterX(slot), y: slot.y }, color);
   }
@@ -2476,7 +2485,16 @@
 
     shot.stashAwarded = true;
     addScore(300, "order");
+    game.runStats.preparedDeliveries += 1;
+    registerHighlight("준비배송", 300);
     showShotFeedback("준비배송! +300", getSlotCenterX(slot), ARENA.slotTop - 44, "#f1c453");
+  }
+
+  function registerHighlight(label, score) {
+    const current = game.runStats.bestHighlight;
+    if (!current || score > current.score) {
+      game.runStats.bestHighlight = { label, score };
+    }
   }
 
   function registerShotResult(position, color) {
@@ -2495,6 +2513,30 @@
     game.itemMessage = text.replace(/\s\+\d+$/, "");
     game.itemMessageTimer = 1.15;
     showFloatingText(text, x, y, color, 30);
+  }
+
+  function showDeliveryStamp(slot, piece) {
+    if (!slot) return;
+
+    const x = getSlotCenterX(slot);
+    const y = ARENA.slotTop + 34;
+    game.runStats.stampCount += 1;
+    game.stamps.push({
+      text: "배달 완료",
+      x,
+      y,
+      color: FOODS[piece.type].edge,
+      angle: randomRange(-0.14, 0.14, game.orderRng),
+      life: 0.9,
+      maxLife: 0.9,
+    });
+    if (game.stamps.length > 4) {
+      game.stamps.splice(0, game.stamps.length - 4);
+    }
+
+    showFloatingText("도장 쾅!", x, y + 34, "#e85d4f", 38);
+    burst(x, y + 8, "#e85d4f", 22);
+    game.trayVelocity += game.trayVelocity >= 0 ? 0.1 : -0.1;
   }
 
   function processMerges() {
@@ -3445,6 +3487,8 @@
     awardStashDeliveryBonus(piece, slot);
     if (game.timeLeft <= 10) {
       addScore(500, "order");
+      game.runStats.closingDeliveries += 1;
+      registerHighlight("마감배송", 500);
       showShotFeedback("마감배송! +500", slot ? getSlotCenterX(slot) : piece.body.position.x, ARENA.slotTop - 24, "#e85d4f");
     }
     game.combo += 1;
@@ -3452,6 +3496,7 @@
     checkFeverTriggers();
 
     burst(piece.body.position.x, piece.body.position.y, FOODS[piece.type].color, 24 + piece.level * 4);
+    showDeliveryStamp(slot, piece);
     if (game.combo >= 5 && game.combo % 5 === 0) {
       setCharacterReaction(`콤보 x${game.combo - 1}!`, "happy", 1.3);
       playSound("combo");
@@ -3598,6 +3643,12 @@
   function checkFeverTriggers() {
     if (game.feverTimer > 0) return;
 
+    if (!game.tutorialActive && game.completed >= 3 && game.runStats.feverActivations === 0) {
+      game.orderStreak = 0;
+      activateFever("피버 주방!");
+      return;
+    }
+
     if (game.combo >= FEVER_COMBO && game.feverComboArmed) {
       game.feverComboArmed = false;
       activateFever("콤보 피버!");
@@ -3635,6 +3686,9 @@
     ui.finalCombo.textContent = `x${Math.max(1, game.maxCombo - 1)}`;
     ui.finalCoins.textContent = `+${game.lastCoinAward.toLocaleString("ko-KR")}`;
     ui.resultTitle.textContent = game.completed >= 8 ? "특급 도시락" : "도시락 마감";
+    if (ui.highlightSummary) {
+      ui.highlightSummary.textContent = getHighlightSummaryText();
+    }
     if (ui.nextGoal) {
       ui.nextGoal.textContent = getNextGoalText();
     }
@@ -3746,7 +3800,31 @@
     const modeText = game.mode === "daily" ? `오늘의 도시락 #${game.dailyDate}` : "일반 모드";
     const score = Math.round(game.score).toLocaleString("ko-KR");
     const combo = Math.max(1, game.maxCombo - 1);
-    return `빙글도시락 캐논 ${score}점 / 도시락 ${game.completed}개 / 최고 콤보 x${combo} / ${getCharacter().name} / ${modeText} / 너도 해봐!`;
+    return `빙글도시락 캐논 ${score}점 / 도시락 ${game.completed}개 / 최고 콤보 x${combo} / ${getShareHighlightText()} / ${modeText} / 너도 해봐!`;
+  }
+
+  function getShareHighlightText() {
+    const best = game.runStats.bestHighlight;
+    if (best) return `하이라이트 ${best.label} +${best.score}`;
+    if (game.runStats.stampCount > 0) return `도장 ${game.runStats.stampCount}회`;
+    return "첫 배달 도전";
+  }
+
+  function getHighlightSummaryText() {
+    const parts = [];
+    if (game.runStats.directDeliveries > 0) parts.push(`직배송 ${game.runStats.directDeliveries}회`);
+    if (game.runStats.bingleDeliveries > 0) parts.push(`빙글배송 ${game.runStats.bingleDeliveries}회`);
+    if (game.runStats.preparedDeliveries > 0) parts.push(`준비배송 ${game.runStats.preparedDeliveries}회`);
+    if (game.runStats.closingDeliveries > 0) parts.push(`마감배송 ${game.runStats.closingDeliveries}회`);
+
+    const best = game.runStats.bestHighlight;
+    if (best) {
+      return `최고 장면: ${best.label} +${best.score} · ${parts.join(" · ") || `도장 ${game.runStats.stampCount}회`}`;
+    }
+    if (game.runStats.stampCount > 0) {
+      return `배달 도장 ${game.runStats.stampCount}회 · 다음 판에는 직배송을 노려보세요.`;
+    }
+    return "첫 배달을 성공하면 하이라이트가 기록됩니다.";
   }
 
   function getNextGoalText() {
@@ -3814,6 +3892,12 @@
       mergeCount: 0,
       wrongs: 0,
       forbiddenHits: 0,
+      directDeliveries: 0,
+      bingleDeliveries: 0,
+      preparedDeliveries: 0,
+      closingDeliveries: 0,
+      stampCount: 0,
+      bestHighlight: null,
     };
   }
 
@@ -5132,6 +5216,7 @@
     drawPowerItems();
     drawPieces();
     drawParticles();
+    drawDeliveryStamps();
     drawFloatingTexts();
     drawTutorialCoach();
     drawFeverOverlay();
@@ -5167,8 +5252,11 @@
     ctx.font = "950 46px system-ui, sans-serif";
     ctx.textAlign = "center";
     ctx.textBaseline = "top";
-    ctx.strokeText("피버 2발", WIDTH / 2, 22);
-    ctx.fillText("피버 2발", WIDTH / 2, 22);
+    ctx.strokeText("피버 주방!", WIDTH / 2, 18);
+    ctx.fillText("피버 주방!", WIDTH / 2, 18);
+    ctx.font = "950 24px system-ui, sans-serif";
+    ctx.strokeText("2발 발사", WIDTH / 2, 68);
+    ctx.fillText("2발 발사", WIDTH / 2, 68);
     ctx.restore();
   }
 
@@ -5911,6 +5999,38 @@
     }
   }
 
+  function drawDeliveryStamps() {
+    for (const stamp of game.stamps) {
+      const progress = clamp(stamp.life / stamp.maxLife, 0, 1);
+      const appear = 1 - progress;
+      const scale = 0.82 + Math.sin(Math.min(1, appear * 3) * Math.PI) * 0.2;
+
+      ctx.save();
+      ctx.globalAlpha = Math.min(1, progress * 1.35);
+      ctx.translate(stamp.x, stamp.y);
+      ctx.rotate(stamp.angle);
+      ctx.scale(scale, scale);
+      ctx.strokeStyle = stamp.color;
+      ctx.fillStyle = "rgba(255, 255, 255, 0.72)";
+      ctx.lineWidth = 5;
+      ctx.beginPath();
+      ctx.arc(0, 0, 42, 0, TAU);
+      ctx.fill();
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(0, 0, 30, 0, TAU);
+      ctx.stroke();
+      ctx.fillStyle = stamp.color;
+      ctx.font = "950 14px system-ui, sans-serif";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(stamp.text, 0, -5);
+      ctx.font = "950 12px system-ui, sans-serif";
+      ctx.fillText("쾅!", 0, 15);
+      ctx.restore();
+    }
+  }
+
   function updateParticles(dt) {
     game.particles = game.particles.filter((particle) => {
       particle.life -= dt;
@@ -5926,6 +6046,11 @@
       text.y += text.vy * dt;
       text.vy *= Math.pow(0.62, dt * 8);
       return text.life > 0;
+    });
+
+    game.stamps = game.stamps.filter((stamp) => {
+      stamp.life -= dt;
+      return stamp.life > 0;
     });
   }
 

@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>빙글도시락 캐논</title>
     <link rel="icon" href="favicon.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="style.css?v=20260512-submit-polish" />
+    <link rel="stylesheet" href="style.css?v=20260512-highlight-finish" />
   </head>
   <body>
     <main class="app-shell" aria-label="빙글도시락 캐논">
@@ -180,6 +180,10 @@
                 </div>
               </dl>
               <p id="dailyDelta" class="daily-delta" hidden></p>
+              <section class="highlight-block" aria-label="오늘의 하이라이트">
+                <div class="highlight-title">오늘의 하이라이트</div>
+                <p id="highlightSummary">첫 배달을 노려보세요.</p>
+              </section>
               <section class="breakdown-block" aria-label="점수 상세">
                 <div class="breakdown-title">점수 상세</div>
                 <div id="scoreBreakdown" class="breakdown-list"></div>
@@ -301,6 +305,6 @@
     </main>
 
     <script src="vendor/matter.min.js"></script>
-    <script src="game.js?v=20260512-submit-polish"></script>
+    <script src="game.js?v=20260512-highlight-finish"></script>
   </body>
 </html>
