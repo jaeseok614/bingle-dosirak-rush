@@ -709,6 +709,106 @@ h1 {
   color: #ffffff;
 }
 
+.tutorial-coach {
+  position: absolute;
+  left: 50%;
+  bottom: 18px;
+  z-index: 8;
+  width: min(620px, calc(100% - 28px));
+  min-height: 94px;
+  display: grid;
+  grid-template-columns: 62px minmax(0, 1fr) 58px;
+  align-items: center;
+  gap: 12px;
+  padding: 13px 14px;
+  border-radius: 8px;
+  color: var(--ink);
+  background: rgba(255, 255, 255, 0.96);
+  border: 2px solid rgba(241, 196, 83, 0.9);
+  box-shadow: 0 18px 38px rgba(24, 49, 43, 0.26);
+  transform: translateX(-50%);
+  cursor: pointer;
+}
+
+.tutorial-coach[hidden] {
+  display: none;
+}
+
+.tutorial-coach-avatar {
+  width: 58px;
+  height: 58px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  color: #ffffff;
+  background: var(--teal);
+  border: 4px solid #ffffff;
+  box-shadow: 0 8px 18px rgba(24, 49, 43, 0.18);
+  font-size: 1.1rem;
+  font-weight: 950;
+}
+
+.tutorial-coach-copy {
+  min-width: 0;
+}
+
+.tutorial-coach-copy span {
+  display: block;
+  color: var(--teal);
+  font-size: 0.7rem;
+  font-weight: 950;
+}
+
+.tutorial-coach-copy strong {
+  display: block;
+  margin-top: 3px;
+  color: var(--leaf-dark);
+  font-size: 1rem;
+  font-weight: 950;
+  line-height: 1.28;
+  white-space: normal;
+}
+
+.tutorial-coach-next {
+  width: 52px;
+  height: 52px;
+  border: 0;
+  border-radius: 50%;
+  color: #ffffff;
+  background: var(--leaf-dark);
+  font-size: 1.35rem;
+  font-weight: 950;
+  cursor: pointer;
+}
+
+.tutorial-coach-next:disabled {
+  cursor: default;
+  opacity: 0.42;
+}
+
+.tutorial-coach.is-waiting-action .tutorial-coach-next {
+  background: var(--gold);
+}
+
+.tutorial-coach.is-waiting-action {
+  pointer-events: none;
+}
+
+body.is-tutorial-coach .action-panel {
+  display: none;
+}
+
+body.is-tutorial-coach .mission-panel,
+body.is-tutorial-coach .profile-strip,
+body.is-tutorial-coach .meter-block,
+body.is-tutorial-coach .order-rule {
+  display: none;
+}
+
+body.is-tutorial-coach .order-panel {
+  opacity: 0.72;
+}
+
 .action-panel {
   padding: 12px;
   border-radius: 8px;
@@ -1750,6 +1850,38 @@ body.is-debug .action-panel .balance-button {
 
   .mobile-hud-meta {
     display: none;
+  }
+
+  .tutorial-coach {
+    bottom: 8px;
+    width: calc(100% - 14px);
+    min-height: 78px;
+    grid-template-columns: 46px minmax(0, 1fr) 44px;
+    gap: 8px;
+    padding: 9px;
+    border-radius: 10px;
+  }
+
+  .tutorial-coach-avatar {
+    width: 44px;
+    height: 44px;
+    border-width: 3px;
+    font-size: 0.92rem;
+  }
+
+  .tutorial-coach-copy span {
+    font-size: 0.58rem;
+  }
+
+  .tutorial-coach-copy strong {
+    font-size: 0.78rem;
+    line-height: 1.22;
+  }
+
+  .tutorial-coach-next {
+    width: 40px;
+    height: 40px;
+    font-size: 1rem;
   }
 
   .mobile-ammo-dock {

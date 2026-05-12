@@ -108,6 +108,14 @@
               <span id="characterBubble">준비 완료</span>
             </div>
           </div>
+          <div id="tutorialCoach" class="tutorial-coach" hidden aria-live="polite">
+            <div id="tutorialCoachAvatar" class="tutorial-coach-avatar" aria-hidden="true">요</div>
+            <div class="tutorial-coach-copy">
+              <span>연습 모드</span>
+              <strong id="tutorialCoachText">쏘기, 합치기, 배달만 배우자.</strong>
+            </div>
+            <button id="tutorialCoachNext" class="tutorial-coach-next" type="button" aria-label="다음">→</button>
+          </div>
           <div id="guideOverlay" class="guide-modal">
             <div class="guide-box" role="dialog" aria-modal="true" aria-labelledby="guideTitle">
               <span class="result-kicker">쏘고 합쳐 배달하는 60초 러시</span>
@@ -305,6 +313,6 @@
     </main>
 
     <script src="vendor/matter.min.js"></script>
-    <script src="game.js?v=20260512-guided-opening"></script>
+    <script src="game.js?v=20260512-coach-tutorial"></script>
   </body>
 </html>

@@ -332,6 +332,122 @@ async function playTouchRun(client) {
   await waitForExpression(client, "!document.querySelector('#gameOver').hidden", 10000);
 }
 
+async function startTutorialRun(client) {
+  await click(client, "#tutorialStartButton");
+  await waitForExpression(
+    client,
+    "document.querySelector('#guideOverlay').hidden && !document.querySelector('#tutorialCoach').hidden",
+    10000,
+  );
+}
+
+async function playGuidedTutorialRun(client) {
+  await startTutorialRun(client);
+  const points = await evaluate(
+    client,
+    `(() => {
+      const rect = document.querySelector('#gameCanvas').getBoundingClientRect();
+      return {
+        launcher: { x: Math.round(rect.left + rect.width * 0.5), y: Math.round(rect.top + rect.height * 0.84) },
+        left: { x: Math.round(rect.left + rect.width * 0.34), y: Math.round(rect.top + rect.height * 0.28) },
+        right: { x: Math.round(rect.left + rect.width * 0.66), y: Math.round(rect.top + rect.height * 0.28) },
+      };
+    })()`,
+  );
+
+  for (let step = 0; step < 140; step += 1) {
+    const state = await evaluate(
+      client,
+      `(() => {
+        const coach = document.querySelector('#tutorialCoach');
+        const next = document.querySelector('#tutorialCoachNext');
+        const delivery = document.querySelector('#mobileDeliveryReadyButton');
+        const dock = document.querySelector('#mobileAmmoDock');
+        return {
+          coachHidden: !coach || coach.hidden,
+          nextDisabled: !next || next.disabled,
+          waitingAction: Boolean(coach?.classList.contains('is-waiting-action')),
+          deliveryVisible: Boolean(dock && !dock.hidden && delivery && !delivery.hidden && !delivery.disabled),
+          gameOver: !document.querySelector('#gameOver').hidden,
+        };
+      })()`,
+    );
+
+    if (state.gameOver) break;
+    if (state.coachHidden) {
+      await sleep(1200);
+      const stillHidden = await evaluate(client, "document.querySelector('#tutorialCoach')?.hidden !== false");
+      if (stillHidden) return;
+      continue;
+    }
+
+    if (!state.waitingAction) {
+      await evaluate(
+        client,
+        `(() => {
+          const next = document.querySelector('#tutorialCoachNext');
+          const coach = document.querySelector('#tutorialCoach');
+          if (next && !next.disabled) next.click();
+          else coach?.click();
+          return true;
+        })()`,
+      );
+      await sleep(420);
+      continue;
+    }
+
+    if (state.deliveryVisible) {
+      await click(client, "#mobileDeliveryReadyButton");
+      await sleep(420);
+      continue;
+    }
+
+    const target = step % 2 === 0 ? points.right : points.left;
+    await evaluate(
+      client,
+      `(() => {
+        if (window.__bingleQa?.fireDirection) {
+          window.__bingleQa.fireDirection(${step % 2 === 0 ? "'right'" : "'left'"});
+          return true;
+        }
+        const x = ${target.x};
+        const y = ${target.y};
+        document.elementFromPoint(x, y)?.click();
+        return true;
+      })()`,
+    );
+    await sleep(900);
+  }
+
+  const finalState = await evaluate(
+    client,
+    `(() => {
+      const coach = document.querySelector('#tutorialCoach');
+      const next = document.querySelector('#tutorialCoachNext');
+      return {
+        coachHidden: !coach || coach.hidden,
+        waitingAction: Boolean(coach?.classList.contains('is-waiting-action')),
+        nextDisabled: Boolean(next?.disabled),
+        coachText: document.querySelector('#tutorialCoachText')?.textContent.trim() || '',
+        orderText: document.querySelector('#mobileOrderText')?.textContent.trim() || '',
+        actionHint: document.querySelector('#mobileActionHint')?.textContent.trim() || '',
+        completed: document.querySelector('#completedValue')?.textContent.trim() || '',
+        currentAmmo: document.querySelector('#mobileCurrentAmmo')?.textContent.trim() || '',
+        score: document.querySelector('#scoreValue')?.textContent.trim() || '',
+        qaState: window.__bingleQa?.state?.() || null,
+        elementAtCenter: (() => {
+          const rect = document.querySelector('#gameCanvas').getBoundingClientRect();
+          const element = document.elementFromPoint(rect.left + rect.width * 0.66, rect.top + rect.height * 0.28);
+          return element ? element.tagName.toLowerCase() + '#' + element.id + '.' + element.className : '';
+        })(),
+      };
+    })()`,
+  );
+  if (!finalState.coachHidden) {
+    throw new Error(`Tutorial did not finish: ${JSON.stringify(finalState)}`);
+  }
+}
+
 async function collectResult(client, label) {
   const result = await evaluate(
     client,
@@ -472,6 +588,27 @@ async function runLayoutOnly(client) {
   }
 }
 
+async function runTutorialOnly(client) {
+  await setMobile(client);
+  await navigateFresh(client, `${targetUrl}?qa=tutorial-${Date.now()}`);
+  await playGuidedTutorialRun(client);
+  const result = await evaluate(
+    client,
+    `(() => ({
+      tutorialHidden: document.querySelector('#tutorialCoach')?.hidden !== false,
+      guideHidden: document.querySelector('#guideOverlay').hidden,
+      gameOverHidden: document.querySelector('#gameOver').hidden,
+      started: document.querySelector('#timeValue').textContent.trim().length > 0,
+      orderText: document.querySelector('#mobileOrderText')?.textContent.trim() || '',
+      actionHint: document.querySelector('#mobileActionHint')?.textContent.trim() || '',
+    }))()`,
+  );
+  console.log(JSON.stringify({ ok: result.tutorialHidden && result.guideHidden && result.gameOverHidden, result }, null, 2));
+  if (!result.tutorialHidden || !result.guideHidden || !result.gameOverHidden) {
+    process.exitCode = 1;
+  }
+}
+
 async function setDesktop(client) {
   await client.send("Emulation.clearDeviceMetricsOverride").catch(() => null);
   await client.send("Emulation.setTouchEmulationEnabled", { enabled: false }).catch(() => null);
@@ -551,6 +688,11 @@ async function main() {
 
     if (process.env.QA_LAYOUT_ONLY === "1") {
       await runLayoutOnly(client);
+      return;
+    }
+
+    if (process.env.QA_TUTORIAL_ONLY === "1") {
+      await runTutorialOnly(client);
       return;
     }
 

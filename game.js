@@ -67,6 +67,10 @@
     activeCharacterImage: document.querySelector("#activeCharacterImage"),
     activeCharacterName: document.querySelector("#activeCharacterName"),
     characterBubble: document.querySelector("#characterBubble"),
+    tutorialCoach: document.querySelector("#tutorialCoach"),
+    tutorialCoachAvatar: document.querySelector("#tutorialCoachAvatar"),
+    tutorialCoachText: document.querySelector("#tutorialCoachText"),
+    tutorialCoachNext: document.querySelector("#tutorialCoachNext"),
     characterSelectOverlay: document.querySelector("#characterSelectOverlay"),
     selectCoin: document.querySelector("#selectCoinValue"),
     startCharacterList: document.querySelector("#startCharacterList"),
@@ -212,6 +216,61 @@
     pickupPractice: { type: "kimchi", level: 1 },
     skillUnlock: { type: "shrimp", level: 1 },
   };
+  const TUTORIAL_COACH_STEPS = [
+    {
+      id: "intro",
+      text: "안녕! 오늘은 쏘기, 합치기, 배달만 배우자.",
+      wait: "next",
+      highlight: [],
+      reaction: "쏘기, 합치기, 배달!",
+    },
+    {
+      id: "directDelivery",
+      text: "밥을 위쪽 밥 칸에 넣어보자. 화면을 꾹 눌렀다가 손을 떼면 발사돼.",
+      wait: "deliver",
+      setup: "directDelivery",
+      highlight: ["currentAmmo", "slot:rice"],
+      reaction: "노란 밥 칸을 보고 쏴요",
+    },
+    {
+      id: "mergeRice",
+      text: "가운데 밥을 맞춰봐. 밥 + 밥 = 주먹밥!",
+      wait: "merge",
+      setup: "mergeRice",
+      highlight: ["currentAmmo", "tutorialTarget"],
+      reaction: "가운데 밥을 맞춰요",
+    },
+    {
+      id: "readyDelivery",
+      text: "주먹밥이 배송 준비됐어. 이제 다시 쏠 수 있어.",
+      wait: "next",
+      highlight: ["deliveryReady"],
+      reaction: "배송 준비!",
+    },
+    {
+      id: "deliverRiceball",
+      text: "주먹밥도 밥 종류야. 위쪽 밥 칸에 넣으면 배달 완료!",
+      wait: "deliver",
+      setup: "preparedDelivery",
+      highlight: ["currentAmmo", "slot:rice"],
+      reaction: "주먹밥은 밥 칸!",
+    },
+    {
+      id: "stashTap",
+      text: "노란 배송! 칸을 눌러봐. 누르면 현재탄으로 바뀌어.",
+      wait: "stashTap",
+      setup: "stashTap",
+      highlight: ["deliveryReady"],
+      reaction: "노란 배송! 칸을 눌러요",
+    },
+    {
+      id: "outro",
+      text: "좋아! 이제 60초 안에 최대한 많이 배달해보자.",
+      wait: "finish",
+      highlight: [],
+      reaction: "연습 끝!",
+    },
+  ];
   const TAU = Math.PI * 2;
   const FIT_TEXT_SELECTOR = [
     ".stat-cell strong",
@@ -244,7 +303,9 @@
     ".result-actions button",
     ".action-panel button",
   ].join(",");
-  const DEBUG_MODE = new URLSearchParams(window.location.search).get("debug") === "1";
+  const URL_PARAMS = new URLSearchParams(window.location.search);
+  const DEBUG_MODE = URL_PARAMS.get("debug") === "1";
+  const QA_MODE = URL_PARAMS.has("qa");
 
   const SCORE_CATEGORIES = {
     base: "기본 점수",
@@ -816,6 +877,13 @@
     tutorialActive: false,
     tutorialRun: false,
     tutorialStep: 0,
+    tutorialWait: "",
+    tutorialActionReady: false,
+    tutorialText: "",
+    tutorialTypedText: "",
+    tutorialTextDone: true,
+    tutorialTypeTimer: 0,
+    tutorialCoachStarted: false,
     tutorialAssistTimer: 0,
     trayAngle: 0,
     trayVelocity: 0,
@@ -873,7 +941,29 @@
     updateCharacterHud(true);
     resetGame(false);
     showGuide();
+    installQaHooks();
     requestAnimationFrame(frame);
+  }
+
+  function installQaHooks() {
+    if (!QA_MODE) return;
+
+    window.__bingleQa = {
+      fireDirection: triggerCannonPreset,
+      state: () => ({
+        running: game.running,
+        started: game.started,
+        awaitingFirstInput: game.awaitingFirstInput,
+        tutorialActive: game.tutorialActive,
+        tutorialStep: game.tutorialStep,
+        tutorialWait: game.tutorialWait,
+        tutorialActionReady: game.tutorialActionReady,
+        loadedType: game.cannon.loadedType,
+        loadedLevel: game.cannon.loadedLevel,
+        completed: game.completed,
+        order: game.order,
+      }),
+    };
   }
 
   function createEngine() {
@@ -982,13 +1072,27 @@
       const setActive = (active) => {
         setDirectionActive(direction, active);
       };
-      button.addEventListener("pointerdown", (event) => {
+      const fireFromButton = (event, source) => {
         event.preventDefault();
         unlockAudio();
-        button.setPointerCapture(event.pointerId);
+        if (source === "click") {
+          const lastPointerAt = Number(button.dataset.lastPointerAt || 0);
+          if (performance.now() - lastPointerAt < 260) return;
+        } else {
+          button.dataset.lastPointerAt = `${performance.now()}`;
+        }
         setActive(true);
         triggerCannonPreset(direction);
+      };
+      button.addEventListener("pointerdown", (event) => {
+        try {
+          button.setPointerCapture?.(event.pointerId);
+        } catch {
+          // Synthetic or interrupted pointer streams may not be capturable.
+        }
+        fireFromButton(event, "pointer");
       });
+      button.addEventListener("click", (event) => fireFromButton(event, "click"));
       button.addEventListener("pointerup", () => setActive(false));
       button.addEventListener("pointercancel", () => setActive(false));
       button.addEventListener("lostpointercapture", () => setActive(false));
@@ -1019,6 +1123,8 @@
     ui.skill.addEventListener("click", useSkill);
     ui.guide.addEventListener("click", showGuide);
     ui.tutorialStart?.addEventListener("click", () => closeGuide({ forceTutorial: true }));
+    ui.tutorialCoach?.addEventListener("click", handleTutorialCoachClick);
+    ui.tutorialCoachNext?.addEventListener("click", handleTutorialCoachClick);
     ui.start.addEventListener("click", () => closeGuide({ skipTutorial: true }));
     ui.playAgain.addEventListener("click", () => startGame({ skipTutorial: true }));
     ui.copyResult.addEventListener("click", copyResultText);
@@ -1238,6 +1344,13 @@
     game.tutorialRun = tutorialRun;
     game.tutorialActive = shouldRun && (forceTutorial || (!skipTutorial && !isTutorialComplete()));
     game.tutorialStep = 0;
+    game.tutorialWait = "";
+    game.tutorialActionReady = false;
+    game.tutorialText = "";
+    game.tutorialTypedText = "";
+    game.tutorialTextDone = true;
+    game.tutorialTypeTimer = 0;
+    game.tutorialCoachStarted = false;
     game.tutorialAssistTimer = 0;
     game.trayAngle = 0;
     game.trayVelocity = 0;
@@ -1255,6 +1368,11 @@
     updateTrayBodies();
     createOrder();
     prepareCannonLoad(true);
+    if (game.tutorialActive) {
+      startTutorialCoach();
+    } else {
+      syncTutorialCoachUi();
+    }
     updateCharacterHud(true);
     updateUi(true);
   }
@@ -1265,7 +1383,9 @@
     resetControls();
     ui.guideOverlay.hidden = true;
     ui.characterSelectOverlay.hidden = true;
-    setCharacterReaction(game.tutorialActive ? "노란 밥 칸을 보고 쏴요" : "꾹 눌러 발사", "happy", game.tutorialActive ? 2.4 : 1.6);
+    if (!game.tutorialActive) {
+      setCharacterReaction("꾹 눌러 발사", "happy", 1.6);
+    }
   }
 
   function showGuide() {
@@ -1401,6 +1521,7 @@
   }
 
   function canUseCannon() {
+    if (game.tutorialActive && !game.tutorialActionReady) return false;
     return (
       game.running &&
       game.started &&
@@ -1459,7 +1580,11 @@
 
     event.preventDefault();
     unlockAudio();
-    canvas.setPointerCapture?.(event.pointerId);
+    try {
+      canvas.setPointerCapture?.(event.pointerId);
+    } catch {
+      // Some browsers reject synthetic pointer capture; aiming still works without it.
+    }
     game.cannon.pointerId = event.pointerId;
     startCannonCharge(point);
   }
@@ -1476,7 +1601,11 @@
 
     event.preventDefault();
     updateCannonAim(getCanvasPoint(event));
-    canvas.releasePointerCapture?.(event.pointerId);
+    try {
+      canvas.releasePointerCapture?.(event.pointerId);
+    } catch {
+      // Pointer capture is best-effort.
+    }
     game.cannon.charging = false;
     fireCannonFromCurrentAim();
   }
@@ -1629,6 +1758,9 @@
     attachShotMeta(piece, createShotMeta(type, level, timestamp, fromStash));
     markPlayerHit(piece, timestamp);
     piece.bump = 0.28;
+    if (game.tutorialActive && isTutorialActionAllowed("deliver") && getDeliverableOrderId(piece)) {
+      piece.tutorialAutoDeliverAt = timestamp + 850;
+    }
     return piece;
   }
 
@@ -1681,6 +1813,15 @@
   }
 
   function createSmartAmmo() {
+    if (game.tutorialActive) {
+      const step = getTutorialCoachStep();
+      const target = getPrimaryIncompleteOrder();
+      if (step && target) {
+        if (step.wait === "deliver") return createAmmo(target.type, target.level, false);
+        if (step.wait === "merge") return createAmmo(target.type, Math.max(0, target.level - 1), false);
+      }
+    }
+
     const introOrder = getIntroOrderSpec();
     if (introOrder) {
       return createAmmo(introOrder.type, Math.max(0, introOrder.level - 1), false);
@@ -1847,12 +1988,19 @@
     return true;
   }
 
-  function selectDeliveryReadyAmmo() {
+  function selectDeliveryReadyAmmo(options = {}) {
+    if (game.tutorialActive && !options.force && !isTutorialActionAllowed("stashTap")) {
+      return false;
+    }
+
     const selected = game.deliveryReadyAmmo;
     if (!selected) return false;
 
     game.deliveryReadyAmmo = null;
     loadPreparedAmmo(selected, "배송 준비!");
+    if (game.tutorialActive && !options.force) {
+      completeTutorialAction("stashTap");
+    }
     return true;
   }
 
@@ -2678,12 +2826,26 @@
     game.itemMessageTimer = 1.4;
     awardMergeShotBonus(a, b, position, type);
     copyMergedShot(a, b, merged);
+    handleTutorialMergeComplete(merged);
     burst(position.x, position.y, FOODS[type].color, 22 + nextLevel * 4);
     setCharacterReaction("합체!", "happy", 1.15);
     playSound(game.combo >= 5 && game.combo % 5 === 0 ? "combo" : "success");
     vibrate([8, 14, 8]);
     checkFeverTriggers();
     updateUi(true);
+  }
+
+  function handleTutorialMergeComplete(merged) {
+    if (!merged || !game.tutorialActive || !isTutorialActionAllowed("merge")) return false;
+
+    const ammo = createAmmo(merged.type, merged.level, true);
+    World.remove(game.world, merged.body);
+    game.pieces = game.pieces.filter((piece) => piece !== merged);
+    game.deliveryReadyAmmo = ammo;
+    game.itemMessage = `${getFoodName(ammo.type, ammo.level)} 배송 준비`;
+    game.itemMessageTimer = 1.4;
+    completeTutorialAction("merge");
+    return true;
   }
 
   function spawnPowerItem() {
@@ -3009,6 +3171,7 @@
     if (game.running) {
       updateGame(dt);
     }
+    updateTutorialCoach(dt);
     updateParticles(dt);
     draw();
 
@@ -3135,6 +3298,15 @@
       const slot = getSlotForBody(body);
       const deliverableId = getDeliverableOrderId(piece);
       checkNearMiss(piece, deliverableId);
+
+      if (piece.tutorialAutoDeliverAt && performance.now() >= piece.tutorialAutoDeliverAt && deliverableId) {
+        const tutorialSlot = SLOTS.find((candidate) => candidate.type === piece.type);
+        if (tutorialSlot) {
+          Body.setPosition(piece.body, { x: getSlotCenterX(tutorialSlot), y: tutorialSlot.y });
+          scorePiece(piece, tutorialSlot, deliverableId);
+          continue;
+        }
+      }
 
       if (slot && isForbiddenSlot(slot, piece)) {
         piece.forbiddenHold += dt;
@@ -3669,6 +3841,12 @@
     playSound("combo");
     vibrate([12, 20, 12]);
     checkFeverTriggers();
+    if (game.tutorialActive) {
+      game.nextOrderDelay = 0;
+      completeTutorialAction("deliver");
+      updateUi(true);
+      return;
+    }
     game.nextOrderDelay = 0.45;
     updateUi(true);
   }
@@ -5213,14 +5391,23 @@
   }
 
   function updateTutorialAssist(dt) {
-    if (!game.tutorialActive || game.completed > 0) return;
+    if (!game.tutorialActive) return;
 
     game.tutorialAssistTimer += dt;
-    if (game.cannon.loadedType !== "rice" || game.cannon.loadedLevel !== 0) {
-      setCannonAmmo(createAmmo("rice", 0, false));
+    const step = getTutorialCoachStep();
+    if (!step || !game.tutorialActionReady) return;
+
+    const target = getPrimaryIncompleteOrder();
+    if (!target) return;
+
+    const level = step.wait === "merge" ? Math.max(0, target.level - 1) : target.level;
+    if (step.wait !== "deliver" && step.wait !== "merge") return;
+
+    if (game.cannon.loadedType !== target.type || game.cannon.loadedLevel !== level) {
+      setCannonAmmo(createAmmo(target.type, level, false));
     }
-    if (game.cannon.nextType !== "rice" || game.cannon.nextLevel !== 0) {
-      setNextCannonAmmo(createAmmo("rice", 0, false));
+    if (game.cannon.nextType !== target.type || game.cannon.nextLevel !== level) {
+      setNextCannonAmmo(createAmmo(target.type, level, false));
     }
   }
 
@@ -5238,14 +5425,19 @@
     const shouldStartMain = game.tutorialRun;
     game.tutorialActive = false;
     game.tutorialRun = false;
-    game.tutorialStep = 4;
+    game.tutorialStep = TUTORIAL_COACH_STEPS.length - 1;
+    game.tutorialWait = "";
+    game.tutorialActionReady = false;
+    game.tutorialCoachStarted = false;
+    game.running = false;
+    resetControls();
     try {
       window.localStorage.setItem(TUTORIAL_KEY, "1");
     } catch {
       // Tutorial progress is optional local state.
     }
+    syncTutorialCoachUi();
     if (shouldStartMain) {
-      game.running = false;
       showFloatingText("좋아요! 본 게임 시작", CENTER.x, CENTER.y - 90, "#2c9aa0", 34);
       window.setTimeout(() => startGame({ skipTutorial: true }), 900);
     } else {
@@ -5256,34 +5448,231 @@
   function updateTutorialState() {
     if (!game.tutorialActive) return;
 
-    if (game.completed > 0) {
-      markTutorialComplete();
-      return;
-    }
-    if (game.tutorialStep === 0 && game.cannon.shotCount > 0) {
-      game.tutorialStep = 1;
-      game.tutorialAssistTimer = 0;
-      setCharacterReaction("좋아요! 밥 칸에 들어가면 끝", "happy", 2.4);
-    }
+    if (!game.tutorialCoachStarted) startTutorialCoach();
   }
 
   function getTutorialMessage() {
     if (!game.tutorialActive) return null;
 
-    if (game.tutorialStep === 0) {
-      return {
-        title: "밥을 밥 칸에 넣으세요",
-        body: "노란 칸을 향해 쏘면 다음 안내가 나옵니다.",
-        focus: "slot",
-        slotType: "rice",
-      };
-    }
+    const step = getTutorialCoachStep();
+    if (!step) return null;
+
     return {
-      title: "잘했어요. 위 칸에 머물면 배달!",
-      body: "밥이 칸 안에 들어가면 연습 완료입니다.",
-      focus: "slot",
-      slotType: "rice",
+      title: getTutorialHintText(step),
+      body: step.text,
+      highlight: step.highlight || [],
     };
+  }
+
+  function getTutorialCoachStep() {
+    return TUTORIAL_COACH_STEPS[game.tutorialStep] || null;
+  }
+
+  function getTutorialHintText(step = getTutorialCoachStep()) {
+    if (!step) return "연습을 준비하세요";
+    if (step.wait === "deliver") return step.id === "directDelivery" ? "밥 칸에 넣으세요" : "밥 칸에 배달하세요";
+    if (step.wait === "merge") return "가운데 밥을 맞추세요";
+    if (step.wait === "stashTap") return "노란 배송! 칸을 누르세요";
+    if (step.wait === "finish") return "연습 끝";
+    return "화살표를 눌러 다음으로";
+  }
+
+  function startTutorialCoach() {
+    game.tutorialCoachStarted = true;
+    showTutorialCoachStep(0);
+  }
+
+  function showTutorialCoachStep(index) {
+    const step = TUTORIAL_COACH_STEPS[index];
+    if (!step) {
+      markTutorialComplete();
+      return;
+    }
+
+    game.tutorialStep = index;
+    game.tutorialWait = step.wait;
+    game.tutorialActionReady = false;
+    game.tutorialText = step.text;
+    game.tutorialTypedText = "";
+    game.tutorialTextDone = false;
+    game.tutorialTypeTimer = 0;
+    game.running = false;
+    game.awaitingFirstInput = false;
+    resetControls();
+    setupTutorialCoachStep(step);
+    setCharacterReaction(step.reaction || getTutorialHintText(step), "happy", 2);
+    updateUi(true);
+    syncTutorialCoachUi();
+  }
+
+  function setupTutorialCoachStep(step) {
+    if (!step?.setup) return;
+
+    if (step.setup === "directDelivery") {
+      setupTutorialOrder("rice", 0);
+      setCannonAmmo(createAmmo("rice", 0, false));
+      setNextCannonAmmo(createAmmo("rice", 0, false));
+      return;
+    }
+
+    if (step.setup === "mergeRice") {
+      setupTutorialOrder("rice", 1);
+      setCannonAmmo(createAmmo("rice", 0, false));
+      setNextCannonAmmo(createAmmo("rice", 0, false));
+      spawnTutorialMergeTarget();
+      return;
+    }
+
+    if (step.setup === "preparedDelivery") {
+      setupTutorialOrder("rice", 1);
+      const ammo = game.deliveryReadyAmmo || createAmmo("rice", 1, true);
+      game.deliveryReadyAmmo = null;
+      loadPreparedAmmo(ammo, "배송 준비!");
+      setNextCannonAmmo(createAmmo("rice", 0, false));
+      return;
+    }
+
+    if (step.setup === "stashTap") {
+      setupTutorialOrder("egg", 1);
+      game.deliveryReadyAmmo = createAmmo("egg", 1, true);
+      setCannonAmmo(createAmmo("rice", 0, false));
+      setNextCannonAmmo(createAmmo("egg", 0, false));
+      updateUi(false);
+    }
+  }
+
+  function setupTutorialOrder(type, level) {
+    clearIngredients();
+    game.pendingMerges.clear();
+    game.deliveryReadyAmmo = null;
+    game.ammoStash = [];
+    game.progress = {};
+    const id = orderKey(type, level);
+    game.order = { [id]: 1 };
+    game.progress[id] = 0;
+    game.targetTotal = 1;
+    game.targetDone = 0;
+    game.orderRule = ORDER_RULES.normal;
+    game.orderElapsed = 0;
+    game.orderHadWrong = false;
+    game.orderHadForbiddenHit = false;
+    game.forbiddenType = "";
+    game.nextOrderDelay = 0;
+    game.orderIndex = game.completed + 1;
+    game.tutorialAssistTimer = 0;
+  }
+
+  function updateTutorialCoach(dt) {
+    if (!game.tutorialActive) {
+      syncTutorialCoachUi();
+      return;
+    }
+
+    if (!game.tutorialTextDone) {
+      game.tutorialTypeTimer += dt;
+      const nextLength = Math.min(game.tutorialText.length, Math.floor(game.tutorialTypeTimer * 34));
+      if (nextLength !== game.tutorialTypedText.length) {
+        game.tutorialTypedText = game.tutorialText.slice(0, nextLength);
+      }
+      if (game.tutorialTypedText.length >= game.tutorialText.length) {
+        game.tutorialTypedText = game.tutorialText;
+        game.tutorialTextDone = true;
+      }
+    }
+    syncTutorialCoachUi();
+  }
+
+  function syncTutorialCoachUi() {
+    document.body.classList.toggle("is-tutorial-coach", Boolean(game.tutorialActive));
+    if (!ui.tutorialCoach) return;
+
+    const show =
+      game.tutorialActive &&
+      game.started &&
+      game.timeLeft > 0 &&
+      ui.guideOverlay.hidden &&
+      ui.modal.hidden;
+    ui.tutorialCoach.hidden = !show;
+    if (!show) return;
+
+    const character = CHARACTERS[meta.selectedCharacter] || CHARACTERS.cook;
+    ui.tutorialCoachAvatar.textContent = character.short || "요";
+    ui.tutorialCoachAvatar.style.backgroundColor = character.color;
+    ui.tutorialCoachText.textContent = game.tutorialTypedText || "";
+    ui.tutorialCoach.classList.toggle("is-waiting-action", game.tutorialActionReady);
+
+    const step = getTutorialCoachStep();
+    const waitingAction = Boolean(step && step.wait !== "next" && step.wait !== "finish" && game.tutorialActionReady);
+    ui.tutorialCoachNext.disabled = !game.tutorialTextDone || waitingAction;
+    ui.tutorialCoachNext.textContent = step?.wait === "finish" ? "시작" : "→";
+    ui.tutorialCoachNext.setAttribute("aria-label", step?.wait === "finish" ? "본 게임 시작" : "다음");
+  }
+
+  function handleTutorialCoachClick(event) {
+    if (!game.tutorialActive) return;
+
+    event.preventDefault();
+    event.stopPropagation();
+    if (!game.tutorialTextDone) {
+      finishTutorialTyping();
+      return;
+    }
+    if (game.tutorialActionReady) return;
+
+    proceedTutorialCoach();
+  }
+
+  function finishTutorialTyping() {
+    game.tutorialTypedText = game.tutorialText;
+    game.tutorialTextDone = true;
+    syncTutorialCoachUi();
+  }
+
+  function proceedTutorialCoach() {
+    const step = getTutorialCoachStep();
+    if (!step) return;
+
+    if (step.wait === "next") {
+      showTutorialCoachStep(game.tutorialStep + 1);
+      return;
+    }
+    if (step.wait === "finish") {
+      markTutorialComplete();
+      return;
+    }
+
+    beginTutorialAction(step.wait);
+  }
+
+  function beginTutorialAction(wait) {
+    game.tutorialActionReady = true;
+    game.awaitingFirstInput = wait === "deliver" || wait === "merge";
+    const target = getPrimaryIncompleteOrder();
+    if (target && (wait === "deliver" || wait === "merge")) {
+      const level = wait === "merge" ? Math.max(0, target.level - 1) : target.level;
+      setCannonAmmo(createAmmo(target.type, level, false));
+      setNextCannonAmmo(createAmmo(target.type, level, false));
+    }
+    game.running = wait !== "stashTap";
+    game.lastFrame = 0;
+    setCharacterReaction(getTutorialHintText(), "happy", 1.5);
+    syncTutorialCoachUi();
+    updateUi(false);
+  }
+
+  function isTutorialActionAllowed(action) {
+    return !game.tutorialActive || (game.tutorialActionReady && game.tutorialWait === action);
+  }
+
+  function completeTutorialAction(action) {
+    if (!game.tutorialActive || !isTutorialActionAllowed(action)) return false;
+
+    game.tutorialActionReady = false;
+    game.running = false;
+    game.awaitingFirstInput = false;
+    resetControls();
+    showTutorialCoachStep(game.tutorialStep + 1);
+    return true;
   }
 
   function draw() {
@@ -5348,63 +5737,97 @@
     const message = getTutorialMessage();
     if (!message || !game.started || game.timeLeft <= 0 || !ui.guideOverlay.hidden || !ui.modal.hidden) return;
 
+    const focusShapes = getTutorialFocusShapes(message.highlight);
+    if (!focusShapes.length) return;
+
     const pulse = 0.5 + Math.sin(performance.now() / 130) * 0.5;
-    const slot = SLOTS.find((candidate) => candidate.type === message.slotType);
-    if (slot) {
-      const bounds = getSlotBounds(slot);
+    ctx.save();
+    ctx.fillStyle = "rgba(8, 23, 20, 0.48)";
+    ctx.fillRect(0, 0, WIDTH, HEIGHT);
+    ctx.globalCompositeOperation = "destination-out";
+    for (const shape of focusShapes) {
+      drawTutorialFocusShape(shape, true);
+    }
+    ctx.globalCompositeOperation = "source-over";
+
+    for (const shape of focusShapes) {
       ctx.save();
       ctx.strokeStyle = "#f1c453";
-      ctx.lineWidth = 8 + pulse * 4;
-      ctx.shadowColor = "rgba(241, 196, 83, 0.62)";
-      ctx.shadowBlur = 18 + pulse * 18;
-      roundRect(bounds.left - 8, ARENA.slotTop - 8, bounds.right - bounds.left + 16, ARENA.slotBottom - ARENA.slotTop + 16, 16);
+      ctx.lineWidth = 7 + pulse * 4;
+      ctx.shadowColor = "rgba(241, 196, 83, 0.72)";
+      ctx.shadowBlur = 18 + pulse * 16;
+      drawTutorialFocusShape(shape, false);
       ctx.stroke();
       ctx.restore();
     }
-
-    ctx.save();
-    const boxX = CENTER.x - 270;
-    const boxY = ARENA.slotBottom + 12;
-    const boxWidth = 540;
-    const boxHeight = 96;
-
-    ctx.fillStyle = "rgba(255, 255, 255, 0.95)";
-    ctx.strokeStyle = "rgba(241, 196, 83, 0.82)";
-    ctx.lineWidth = 3;
-    ctx.shadowColor = "rgba(24, 49, 43, 0.18)";
-    ctx.shadowBlur = 16;
-    roundRect(boxX, boxY, boxWidth, boxHeight, 16);
-    ctx.fill();
-    ctx.stroke();
-    ctx.shadowColor = "transparent";
-
-    const character = CHARACTERS[meta.selectedCharacter] || CHARACTERS.cook;
-    ctx.fillStyle = character.color;
-    ctx.strokeStyle = "#ffffff";
-    ctx.lineWidth = 5;
-    ctx.beginPath();
-    ctx.arc(boxX + 45, boxY + 48, 25, 0, TAU);
-    ctx.fill();
-    ctx.stroke();
-    ctx.fillStyle = "#ffffff";
-    ctx.font = "950 17px system-ui, sans-serif";
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    ctx.fillText(character.short || "요", boxX + 45, boxY + 48);
-
-    ctx.fillStyle = "#1f5145";
-    ctx.font = "950 23px system-ui, sans-serif";
-    ctx.textAlign = "left";
-    ctx.textBaseline = "middle";
-    ctx.fillText(message.title, boxX + 86, boxY + 32);
-    ctx.fillStyle = "#62756e";
-    ctx.font = "850 15px system-ui, sans-serif";
-    ctx.fillText(message.body, boxX + 86, boxY + 58);
-
-    ctx.fillStyle = "#2c9aa0";
-    ctx.font = "950 12px system-ui, sans-serif";
-    ctx.fillText("가운데 안내와 깜빡이는 대상만 보면 됩니다", boxX + 86, boxY + 80);
     ctx.restore();
+  }
+
+  function getTutorialFocusShapes(highlights = []) {
+    const shapes = [];
+
+    for (const highlight of highlights) {
+      if (highlight === "currentAmmo") {
+        shapes.push({ kind: "circle", x: CANNON.x, y: CANNON.y + 8, radius: 74 });
+        continue;
+      }
+
+      if (highlight.startsWith("slot:")) {
+        const type = highlight.slice("slot:".length);
+        const slot = SLOTS.find((candidate) => candidate.type === type);
+        if (!slot) continue;
+
+        const bounds = getSlotBounds(slot);
+        shapes.push({
+          kind: "rect",
+          x: bounds.left - 10,
+          y: ARENA.slotTop - 10,
+          width: bounds.right - bounds.left + 20,
+          height: ARENA.slotBottom - ARENA.slotTop + 20,
+          radius: 16,
+        });
+        continue;
+      }
+
+      if (highlight === "tutorialTarget") {
+        const target = game.pieces.find((piece) => piece.tutorialTarget && !piece.scored && !piece.merging);
+        if (!target) continue;
+
+        shapes.push({
+          kind: "circle",
+          x: target.body.position.x,
+          y: target.body.position.y,
+          radius: target.body.circleRadius + 48,
+        });
+        continue;
+      }
+
+      if (highlight === "deliveryReady" && game.deliveryReadyAmmo) {
+        const rect = getDeliveryReadyRect();
+        shapes.push({
+          kind: "rect",
+          x: rect.x - 10,
+          y: rect.y - 10,
+          width: rect.width + 20,
+          height: rect.height + 20,
+          radius: 16,
+        });
+      }
+    }
+
+    return shapes;
+  }
+
+  function drawTutorialFocusShape(shape, fill) {
+    if (shape.kind === "circle") {
+      ctx.beginPath();
+      ctx.arc(shape.x, shape.y, shape.radius, 0, TAU);
+      if (fill) ctx.fill();
+      return;
+    }
+
+    roundRect(shape.x, shape.y, shape.width, shape.height, shape.radius || 12);
+    if (fill) ctx.fill();
   }
 
   function drawCenterOrderCue() {
