@@ -29,6 +29,7 @@
     orderMeter: document.querySelector("#orderMeter"),
     mobileOrderHud: document.querySelector("#mobileOrderHud"),
     mobileOrderText: document.querySelector("#mobileOrderText"),
+    mobileActionHint: document.querySelector("#mobileActionHint"),
     mobileTimeText: document.querySelector("#mobileTimeText"),
     mobileScoreText: document.querySelector("#mobileScoreText"),
     mobileComboText: document.querySelector("#mobileComboText"),
@@ -210,6 +211,7 @@
     "#orderPercent",
     "#orderHint",
     "#mobileOrderText",
+    "#mobileActionHint",
     ".mobile-hud-meta span",
     ".order-count",
     ".order-recipe",
@@ -1698,6 +1700,7 @@
     if (game.cannon.charging) return false;
     if (!game.started || game.timeLeft <= 0 || isBlockingOverlayOpen() || !ui.guideOverlay.hidden) return false;
     if (!shouldShowStashUi()) return false;
+    if (!shouldAllowStashMerge()) return false;
     if (!isPointInRect(point, getStashMergeButtonRect())) return false;
 
     mergeBestStashAmmo();
@@ -1889,7 +1892,7 @@
   }
 
   function triggerLaunchPad(piece, pad) {
-    if (!game.running || piece.scored || piece.merging || pad.activeTimer <= 0) return;
+    if (!game.running || !shouldAllowActionExtras() || piece.scored || piece.merging || pad.activeTimer <= 0) return;
 
     const now = performance.now();
     if (now - piece.lastLaunchAt < LAUNCH_PAD_COOLDOWN_MS) return;
@@ -1975,6 +1978,14 @@
 
   function shouldShowStashUi() {
     return game.completed >= 3 || game.ammoStash.length > 0;
+  }
+
+  function shouldAllowStashMerge() {
+    return game.completed >= OPENING_ORDER_COUNT;
+  }
+
+  function shouldAllowActionExtras() {
+    return !game.tutorialActive && game.completed >= OPENING_ORDER_COUNT;
   }
 
   function shouldUnlockSkill() {
@@ -2141,7 +2152,7 @@
   }
 
   function pickOrderRule() {
-    if (game.completed < 6) return ORDER_RULES.normal;
+    if (game.completed < OPENING_ORDER_COUNT) return ORDER_RULES.normal;
     const phaseChance = getRushConfig().specialChance;
     const tunedChance = phaseChance * (meta.balance.specialChance / DEFAULT_BALANCE.specialChance);
     if (game.orderRng() > clamp(tunedChance, 0, 0.75)) return ORDER_RULES.normal;
@@ -2559,7 +2570,7 @@
   }
 
   function spawnPowerItem() {
-    if (!game.running || game.powerItems.length > 0) return;
+    if (!game.running || !shouldAllowActionExtras() || game.powerItems.length > 0) return;
 
     const type = ITEM_KEYS[Math.floor(game.itemRng() * ITEM_KEYS.length)];
     const item = {
@@ -2825,6 +2836,13 @@
     }
 
     if (!game.running || game.awaitingFirstInput) return;
+    if (!shouldAllowActionExtras()) {
+      for (const pad of game.launchPads) {
+        pad.activeTimer = 0;
+        pad.respawnTimer = Math.max(pad.respawnTimer, 0.65);
+      }
+      return;
+    }
 
     for (const pad of game.launchPads) {
       if (pad.activeTimer > 0) {
@@ -2940,6 +2958,8 @@
     game.magnetTimer = Math.max(0, game.magnetTimer - dt);
     game.itemMessageTimer = Math.max(0, game.itemMessageTimer - dt);
 
+    if (!shouldAllowActionExtras()) return;
+
     if (game.powerItems.length === 0) {
       game.itemSpawnTimer -= game.feverTimer > 0 ? dt * 2.4 : dt;
       if (game.itemSpawnTimer <= 0) {
@@ -3052,6 +3072,10 @@
           continue;
         }
         if (Number.isFinite(piece.pickupExpiresAt) && now >= piece.pickupExpiresAt) {
+          if (shouldRescueImportantPickup(piece)) {
+            collectPieceToAmmo(piece, "auto");
+            continue;
+          }
           discardPickupPiece(piece);
         }
         continue;
@@ -3110,6 +3134,10 @@
       !game.tutorialActive &&
       isAmmoUsefulForCurrentOrder(piece.type, piece.level)
     );
+  }
+
+  function shouldRescueImportantPickup(piece) {
+    return isExactOrderAmmo(piece.type, piece.level) || isAmmoUsefulForCurrentOrder(piece.type, piece.level);
   }
 
   function getPickupLifeMs(piece) {
@@ -3290,6 +3318,8 @@
   }
 
   function mergeBestStashAmmo() {
+    if (!shouldAllowStashMerge()) return false;
+
     const merge = findBestStashMerge();
     const rect = getStashMergeButtonRect();
     const x = rect.x + rect.width / 2;
@@ -4815,9 +4845,12 @@
       const { type, level } = parseOrderKey(id);
       const done = game.progress?.[id] || 0;
       const extra = entries.length > 1 ? ` 외 ${entries.length - 1}` : "";
-      ui.mobileOrderText.textContent = `${getFoodName(type, level)} ${done}/${amount}${extra}`;
+      ui.mobileOrderText.textContent = `${getFoodName(type, level)} → ${FOODS[type].name} 칸 · ${done}/${amount}${extra}`;
     }
 
+    if (ui.mobileActionHint) {
+      ui.mobileActionHint.textContent = `지금: ${getShortActionHint()}`;
+    }
     ui.mobileTimeText.textContent = `${game.timeLeft.toFixed(1)}초`;
     ui.mobileScoreText.textContent = `${Math.round(game.score).toLocaleString("ko-KR")}점`;
     ui.mobileComboText.textContent = `x${game.combo}`;
@@ -4868,9 +4901,11 @@
       );
     }
     if (ui.mobileStashMerge) {
-      const canMerge = Boolean(findBestStashMerge());
+      const allowMerge = shouldAllowStashMerge();
+      const canMerge = allowMerge && Boolean(findBestStashMerge());
+      ui.mobileStashMerge.hidden = !allowMerge;
       ui.mobileStashMerge.disabled =
-        !shouldShowStashUi() || !game.started || game.timeLeft <= 0 || !canMerge || !ui.guideOverlay.hidden || !ui.modal.hidden;
+        !allowMerge || !shouldShowStashUi() || !game.started || game.timeLeft <= 0 || !canMerge || !ui.guideOverlay.hidden || !ui.modal.hidden;
     }
   }
 
@@ -4968,13 +5003,27 @@
     return hasDoublePickupSkill() ? "집기x2" : "집기";
   }
 
+  function getShortActionHint() {
+    return getOrderHintText().replace(/[.。]$/, "");
+  }
+
   function getOrderHintText() {
     if (!game.started) {
       return "밥 칸에 넣으세요.";
     }
 
+    const currentAmmo = getCurrentCannonAmmo();
+    if (currentAmmo && isAmmoUsefulForCurrentOrder(currentAmmo.type, currentAmmo.level)) {
+      return `${FOODS[currentAmmo.type].name} 칸에 넣으세요.`;
+    }
+
     if (game.deliveryReadyAmmo) {
       return "배송 준비를 탭하세요.";
+    }
+
+    const usefulAmmo = game.ammoStash.find((ammo) => ammo && isAmmoUsefulForCurrentOrder(ammo.type, ammo.level));
+    if (usefulAmmo) {
+      return "노란 배송! 칸을 탭하세요.";
     }
 
     const pickupPiece = game.pieces.find((piece) => piece.pickupReady && isAmmoUsefulForCurrentOrder(piece.type, piece.level));
@@ -4985,19 +5034,9 @@
       return "깜빡이는 재료를 탭하세요.";
     }
 
-    const usefulAmmo = game.ammoStash.find((ammo) => ammo && isAmmoUsefulForCurrentOrder(ammo.type, ammo.level));
-    if (usefulAmmo) {
-      return "노란 배송! 칸을 탭하세요.";
-    }
-
-    const stashMerge = findBestStashMerge();
+    const stashMerge = shouldAllowStashMerge() ? findBestStashMerge() : null;
     if (stashMerge?.useful) {
       return "보관함 합치기를 누르세요.";
-    }
-
-    const currentAmmo = getCurrentCannonAmmo();
-    if (currentAmmo && isAmmoUsefulForCurrentOrder(currentAmmo.type, currentAmmo.level)) {
-      return `${FOODS[currentAmmo.type].name} 칸에 넣으세요.`;
     }
 
     const id = Object.keys(game.order || {}).find((key) => {
@@ -5440,7 +5479,8 @@
     const rects = getAmmoSlotRects();
     const deliveryRect = getDeliveryReadyRect();
     const mergeButton = getStashMergeButtonRect();
-    const canMergeStash = Boolean(findBestStashMerge());
+    const allowMerge = shouldAllowStashMerge();
+    const canMergeStash = allowMerge && Boolean(findBestStashMerge());
 
     if (game.deliveryReadyAmmo) {
       const ammo = game.deliveryReadyAmmo;
@@ -5482,15 +5522,17 @@
     ctx.font = "950 12px system-ui, sans-serif";
     ctx.fillText("탭 장전", CENTER.x - 27, rects[0].y - 16);
 
-    ctx.fillStyle = canMergeStash ? "#2c9aa0" : "rgba(107, 121, 116, 0.18)";
-    ctx.strokeStyle = canMergeStash ? "rgba(255, 255, 255, 0.82)" : "rgba(107, 121, 116, 0.24)";
-    ctx.lineWidth = 2;
-    roundRect(mergeButton.x, mergeButton.y, mergeButton.width, mergeButton.height, 11);
-    ctx.fill();
-    ctx.stroke();
-    ctx.fillStyle = canMergeStash ? "#ffffff" : "#6b7974";
-    ctx.font = "950 12px system-ui, sans-serif";
-    ctx.fillText("합치기", mergeButton.x + mergeButton.width / 2, mergeButton.y + mergeButton.height / 2);
+    if (allowMerge) {
+      ctx.fillStyle = canMergeStash ? "#2c9aa0" : "rgba(107, 121, 116, 0.18)";
+      ctx.strokeStyle = canMergeStash ? "rgba(255, 255, 255, 0.82)" : "rgba(107, 121, 116, 0.24)";
+      ctx.lineWidth = 2;
+      roundRect(mergeButton.x, mergeButton.y, mergeButton.width, mergeButton.height, 11);
+      ctx.fill();
+      ctx.stroke();
+      ctx.fillStyle = canMergeStash ? "#ffffff" : "#6b7974";
+      ctx.font = "950 12px system-ui, sans-serif";
+      ctx.fillText("합치기", mergeButton.x + mergeButton.width / 2, mergeButton.y + mergeButton.height / 2);
+    }
     ctx.restore();
 
     for (const rect of rects) {
@@ -5558,6 +5600,8 @@
   }
 
   function drawLaunchPads() {
+    if (!shouldAllowActionExtras()) return;
+
     const time = performance.now() / 220;
 
     for (const pad of game.launchPads) {

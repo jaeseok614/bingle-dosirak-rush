@@ -488,6 +488,19 @@ h1 {
   white-space: nowrap;
 }
 
+.mobile-order-hud em {
+  display: block;
+  margin-top: 3px;
+  overflow: hidden;
+  color: #1f5145;
+  font-size: 0.74rem;
+  font-style: normal;
+  font-weight: 950;
+  line-height: 1.15;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .mobile-order-hud.is-paused {
   border-color: rgba(232, 93, 79, 0.32);
   box-shadow: 0 12px 26px rgba(232, 93, 79, 0.18);
@@ -1698,6 +1711,12 @@ body.is-debug .action-panel .balance-button {
   .mobile-order-hud strong {
     font-size: 0.78rem;
     line-height: 1.12;
+    white-space: normal;
+  }
+
+  .mobile-order-hud em {
+    margin-top: 2px;
+    font-size: 0.66rem;
     white-space: normal;
   }
 
