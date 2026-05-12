@@ -234,7 +234,7 @@
     },
     {
       id: "mergeRice",
-      text: "가운데 밥을 맞춰봐. 밥 + 밥 = 주먹밥!",
+      text: "같은 재료 두 개가 닿으면 한 단계 커져. 지금은 밥 + 밥 = 주먹밥!",
       wait: "merge",
       setup: "mergeRice",
       highlight: ["currentAmmo", "tutorialTarget"],
@@ -242,7 +242,7 @@
     },
     {
       id: "readyDelivery",
-      text: "주먹밥이 배송 준비됐어. 이제 다시 쏠 수 있어.",
+      text: "주문에 맞는 음식으로 합쳐지면 바로 배송 준비로 올라와. 이제 다시 쏠 수 있어.",
       wait: "next",
       highlight: ["deliveryReady"],
       reaction: "배송 준비!",
@@ -262,6 +262,13 @@
       setup: "stashTap",
       highlight: ["deliveryReady"],
       reaction: "노란 배송 준비를 눌러요",
+    },
+    {
+      id: "scoreTips",
+      text: "합체와 배달을 이어가면 콤보가 올라. 콤보 x8 또는 도시락 3개 연속이면 피버가 켜져서 2발씩 나가!",
+      wait: "next",
+      highlight: [],
+      reaction: "콤보와 피버!",
     },
     {
       id: "outro",
@@ -2843,7 +2850,24 @@
     game.itemMessageTimer = 1.4;
     awardMergeShotBonus(a, b, position, type);
     copyMergedShot(a, b, merged);
-    handleTutorialMergeComplete(merged);
+    if (handleTutorialMergeComplete(merged)) {
+      burst(position.x, position.y, FOODS[type].color, 22 + nextLevel * 4);
+      setCharacterReaction("합체!", "happy", 1.15);
+      playSound(game.combo >= 5 && game.combo % 5 === 0 ? "combo" : "success");
+      vibrate([8, 14, 8]);
+      checkFeverTriggers();
+      updateUi(true);
+      return;
+    }
+    if (captureMergedOrderAmmo(merged, position)) {
+      burst(position.x, position.y, FOODS[type].color, 22 + nextLevel * 4);
+      setCharacterReaction("합치면 바로 써요!", "happy", 1.2);
+      playSound(game.combo >= 5 && game.combo % 5 === 0 ? "combo" : "success");
+      vibrate([8, 14, 8]);
+      checkFeverTriggers();
+      updateUi(true);
+      return;
+    }
     burst(position.x, position.y, FOODS[type].color, 22 + nextLevel * 4);
     setCharacterReaction("합체!", "happy", 1.15);
     playSound(game.combo >= 5 && game.combo % 5 === 0 ? "combo" : "success");
@@ -2862,6 +2886,19 @@
     game.itemMessage = `${getFoodName(ammo.type, ammo.level)} 배송 준비`;
     game.itemMessageTimer = 1.4;
     completeTutorialAction("merge");
+    return true;
+  }
+
+  function captureMergedOrderAmmo(merged, position) {
+    if (!merged || game.tutorialActive) return false;
+    if (!isAmmoUsefulForCurrentOrder(merged.type, merged.level)) return false;
+
+    const ammo = createAmmo(merged.type, merged.level, true);
+    World.remove(game.world, merged.body);
+    game.pieces = game.pieces.filter((piece) => piece !== merged);
+    routePriorityAmmo(ammo);
+    showFloatingText("합치면 바로 배송 준비!", CANNON.x, CANNON.y - 142, FOODS[ammo.type].color, 24);
+    burst(position.x, position.y - 10, "#f1c453", 10);
     return true;
   }
 
