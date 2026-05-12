@@ -197,6 +197,7 @@
   const PICKUP_IMPORTANT_MS = 9500;
   const PICKUP_TUTORIAL_MS = Number.POSITIVE_INFINITY;
   const PICKUP_BLINK_MS = 1800;
+  const INTRO_AUTO_PICKUP_DELAY_MS = 900;
   const DELIVERY_READY_MS = 5200;
   const TUTORIAL_KEY = "bingle-dosirak-rush-tutorial";
   const TAU = Math.PI * 2;
@@ -267,7 +268,7 @@
       cost: 70,
       color: "#e85d4f",
       image: "assets/characters/sprinter.png",
-      description: "발사 속도 +15%, 톡 치기 쿨타임 -15%",
+      description: "발사 속도 +15%, 집기 쿨타임 -15%",
       stats: {
         rotate: 1.15,
         score: 1,
@@ -715,6 +716,15 @@
     ORDER_RULES.heavy,
     ORDER_RULES.slippery,
     ORDER_RULES.forbidden,
+  ];
+  const EARLY_SPECIAL_RULES = [ORDER_RULES.spicy, ORDER_RULES.protein, ORDER_RULES.heavy, ORDER_RULES.slippery];
+  const MID_SPECIAL_RULES = [
+    ORDER_RULES.fast,
+    ORDER_RULES.clean,
+    ORDER_RULES.spicy,
+    ORDER_RULES.protein,
+    ORDER_RULES.heavy,
+    ORDER_RULES.slippery,
   ];
 
   const controls = {
@@ -1279,33 +1289,82 @@
   }
 
   function useSkill() {
-    if (!game.running || game.skillCooldown > 0 || game.pieces.length === 0) return;
+    if (!game.running || game.skillCooldown > 0 || game.tutorialActive) return;
 
     unlockAudio();
-    markFirstInput();
-    const hitAt = performance.now();
-    game.skillCooldown = SKILL_COOLDOWN * getCharacterStats().skillCooldown;
-    game.itemMessage = "톡!";
-    game.itemMessageTimer = 1.2;
 
-    for (const piece of game.pieces) {
-      const dx = piece.body.position.x - CENTER.x;
-      const dy = piece.body.position.y - CENTER.y;
-      const distance = Math.max(60, Math.hypot(dx, dy));
-      Body.setVelocity(piece.body, {
-        x: piece.body.velocity.x + (dx / distance) * 3.6 + randomRange(-1.2, 1.2),
-        y: piece.body.velocity.y + (dy / distance) * 3.6 - 1.2,
-      });
-      Body.setAngularVelocity(piece.body, randomRange(-0.22, 0.22));
-      piece.bump = 0.18;
-      markPlayerHit(piece, hitAt);
+    const targets = findPickupSkillTargets(getPickupSkillLimit());
+    if (!targets.length) {
+      game.itemMessage = "회수 없음";
+      game.itemMessageTimer = 1;
+      showFloatingText("회수할 재료 없음", CENTER.x, CANNON.y - 112, "#6b7974", 22);
+      setCharacterReaction("회수할 재료 없음", "idle", 1.1);
+      updateUi(false);
+      return;
     }
 
-    burst(CENTER.x, CENTER.y, "#2c9aa0", 24);
-    setCharacterReaction("톡!", "skill", 1.2);
+    markFirstInput();
+    game.skillCooldown = SKILL_COOLDOWN * getCharacterStats().skillCooldown;
+
+    for (const piece of targets) {
+      const { x, y } = piece.body.position;
+      collectPieceToAmmo(piece, "skill");
+      burst(x, y, "#f1c453", 12);
+    }
+
+    game.itemMessage = targets.length > 1 ? "집기 x2!" : "집기!";
+    game.itemMessageTimer = 1.2;
+    setCharacterReaction(targets.length > 1 ? "두 개 집었어!" : "집었어!", "skill", 1.2);
     playSound("item");
-    vibrate(12);
+    vibrate(targets.length > 1 ? [8, 24, 8] : 16);
     updateUi(false);
+  }
+
+  function getPickupSkillCandidates() {
+    return game.pieces.filter((piece) => piece.pickupReady && !piece.scored && !piece.merging);
+  }
+
+  function getPickupSkillLimit() {
+    return game.feverTimer > 0 ? 2 : 1;
+  }
+
+  function hasDoublePickupSkill() {
+    return game.feverTimer > 0 && getPickupSkillCandidates().length > 1;
+  }
+
+  function findPickupSkillTargets(limit = 1) {
+    const now = performance.now();
+
+    return getPickupSkillCandidates()
+      .map((piece) => ({
+        piece,
+        rank: getPickupSkillPriority(piece, now),
+      }))
+      .sort((a, b) => b.rank - a.rank)
+      .slice(0, limit)
+      .map(({ piece }) => piece);
+  }
+
+  function getPickupSkillPriority(piece, now = performance.now()) {
+    let score = 0;
+
+    if (isExactOrderAmmo(piece.type, piece.level)) {
+      score += 10000;
+    } else if (isAmmoUsefulForCurrentOrder(piece.type, piece.level)) {
+      score += 7200;
+    } else if (isAmmoRelatedToCurrentOrder(piece.type)) {
+      score += 3000;
+    }
+
+    score += piece.level * 400;
+
+    if (Number.isFinite(piece.pickupExpiresAt)) {
+      const remainingMs = piece.pickupExpiresAt - now;
+      score += Math.max(0, 2200 - remainingMs) * 0.45;
+    }
+
+    const distance = Math.hypot(piece.body.position.x - CANNON.x, piece.body.position.y - CANNON.y);
+    return score - distance * 0.02;
   }
 
   function getCanvasPoint(event) {
@@ -1535,7 +1594,7 @@
   }
 
   function createSmartAmmo() {
-    if (game.tutorialActive && game.completed === 0 && game.tutorialStep <= 2) {
+    if (getIntroOrderSpec()) {
       return createAmmo("rice", 0, false);
     }
 
@@ -1824,6 +1883,30 @@
     return RUSH_PHASES[getRushPhase()] || RUSH_PHASES[0];
   }
 
+  function getIntroStep() {
+    if (game.tutorialActive && game.completed === 0) return "tutorialDirect";
+    if (game.completed === 0) return "direct";
+    if (game.completed === 1) return "mergeAutoLoad";
+    if (game.completed === 2) return "stashTap";
+    return "normal";
+  }
+
+  function isIntroMergeStep() {
+    const step = getIntroStep();
+    return step === "mergeAutoLoad" || step === "stashTap";
+  }
+
+  function getIntroOrderSpec() {
+    const step = getIntroStep();
+    if (step === "tutorialDirect" || step === "direct") {
+      return { type: "rice", level: 0 };
+    }
+    if (step === "mergeAutoLoad" || step === "stashTap") {
+      return { type: "rice", level: 1 };
+    }
+    return null;
+  }
+
   function getOrderCountForPhase(phase) {
     if (phase <= 0) return 1;
     if (phase === 1) return game.completed >= 4 ? 2 : 1;
@@ -1871,10 +1954,11 @@
     game.orderHadForbiddenHit = false;
     game.forbiddenType = "";
     game.orderRule = pickOrderRule();
+    const introOrder = getIntroOrderSpec();
     const foodPool = game.orderRule.foods || FOOD_KEYS;
 
-    if (game.tutorialActive && game.completed === 0) {
-      const id = orderKey("rice", 1);
+    if (introOrder) {
+      const id = orderKey(introOrder.type, introOrder.level);
       order[id] = 1;
       game.progress[id] = 0;
       game.targetTotal = 1;
@@ -1912,10 +1996,15 @@
       spawnStarterIngredients();
     }
     if (game.started) {
-      if (!game.cannon.loadedType || getRushPhase() === 0 || !orderHasType(game.order, game.cannon.loadedType)) {
+      if (introOrder) {
         setCannonAmmo(createSmartAmmo());
+        setNextCannonAmmo(createSmartAmmo());
+      } else if (!game.cannon.loadedType || getRushPhase() === 0 || !orderHasType(game.order, game.cannon.loadedType)) {
+        setCannonAmmo(createSmartAmmo());
+        setNextCannonAmmo(createSmartAmmo());
+      } else {
+        setNextCannonAmmo(createSmartAmmo());
       }
-      setNextCannonAmmo(createSmartAmmo());
     }
     updateUi(true);
   }
@@ -1959,11 +2048,18 @@
   }
 
   function pickOrderRule() {
-    if (game.completed === 0) return ORDER_RULES.normal;
+    if (game.completed < 3) return ORDER_RULES.normal;
     const phaseChance = getRushConfig().specialChance;
     const tunedChance = phaseChance * (meta.balance.specialChance / DEFAULT_BALANCE.specialChance);
     if (game.orderRng() > clamp(tunedChance, 0, 0.75)) return ORDER_RULES.normal;
-    return SPECIAL_RULES[Math.floor(game.orderRng() * SPECIAL_RULES.length)];
+    const rules = getSpecialRulePool();
+    return rules[Math.floor(game.orderRng() * rules.length)] || ORDER_RULES.normal;
+  }
+
+  function getSpecialRulePool() {
+    if (game.completed < 6) return EARLY_SPECIAL_RULES;
+    if (game.completed < 8) return MID_SPECIAL_RULES;
+    return SPECIAL_RULES;
   }
 
   function orderKey(type, level) {
@@ -1993,6 +2089,14 @@
 
     const previous = getFoodName(type, safeLevel - 1);
     return `${previous} + ${previous} = ${getFoodName(type, safeLevel)}`;
+  }
+
+  function getMergeActionHint(type, level = 0) {
+    const safeLevel = clamp(Math.round(level), 0, MAX_FOOD_LEVEL);
+    if (safeLevel <= 0) return `${FOODS[type].name}을 위 ${FOODS[type].name} 칸에 넣으세요`;
+
+    const previous = getFoodName(type, safeLevel - 1);
+    return `${previous}끼리 맞춰 ${getFoodName(type, safeLevel)}을 만드세요`;
   }
 
   function getFoodLevelConfig(type, level = 0) {
@@ -2040,8 +2144,11 @@
   }
 
   function spawnStarterIngredients() {
-    if (game.tutorialActive && game.completed === 0) {
+    if (isIntroMergeStep()) {
       spawnTutorialMergeTarget();
+      return;
+    }
+    if (getIntroStep() === "tutorialDirect" || getIntroStep() === "direct") {
       return;
     }
 
@@ -2133,6 +2240,7 @@
       pickupReady: false,
       pickupReadyAt: 0,
       pickupExpiresAt: 0,
+      autoPickupAt: 0,
       bump: 0,
       lastLaunchAt: 0,
       lastPlayerHitAt: 0,
@@ -2838,6 +2946,10 @@
           y: body.velocity.y * Math.pow(0.08, dt),
         });
         Body.setAngularVelocity(body, body.angularVelocity * Math.pow(0.04, dt));
+        if (piece.autoPickupAt > 0 && now >= piece.autoPickupAt) {
+          collectPieceToAmmo(piece, "auto");
+          continue;
+        }
         if (Number.isFinite(piece.pickupExpiresAt) && now >= piece.pickupExpiresAt) {
           discardPickupPiece(piece);
         }
@@ -2871,6 +2983,7 @@
     piece.pickupReady = true;
     piece.pickupReadyAt = now;
     piece.pickupExpiresAt = now + getPickupLifeMs(piece);
+    piece.autoPickupAt = shouldAutoPickupPiece(piece) ? now + INTRO_AUTO_PICKUP_DELAY_MS : 0;
     piece.settleTime = 0;
     Body.setVelocity(piece.body, { x: 0, y: 0 });
     Body.setAngularVelocity(piece.body, 0);
@@ -2878,7 +2991,7 @@
 
     const important = isAmmoUsefulForCurrentOrder(piece.type, piece.level);
     showFloatingText(
-      important ? "탭해서 보관!" : "탭!",
+      piece.autoPickupAt > 0 ? "곧 자동 보관!" : important ? "탭해서 보관!" : "탭!",
       piece.body.position.x,
       piece.body.position.y - 38,
       FOODS[piece.type].color,
@@ -2890,6 +3003,14 @@
     }
   }
 
+  function shouldAutoPickupPiece(piece) {
+    return (
+      !game.tutorialActive &&
+      (getIntroStep() === "mergeAutoLoad" || getIntroStep() === "stashTap") &&
+      isAmmoUsefulForCurrentOrder(piece.type, piece.level)
+    );
+  }
+
   function getPickupLifeMs(piece) {
     const important = isAmmoUsefulForCurrentOrder(piece.type, piece.level);
     if (game.tutorialActive && important) return PICKUP_TUTORIAL_MS;
@@ -2898,9 +3019,11 @@
     return PICKUP_CLICK_MS;
   }
 
-  function collectPieceToAmmo(piece, clicked = false) {
+  function collectPieceToAmmo(piece, pickupSource = false) {
     if (!piece || piece.scored || piece.merging) return;
 
+    const source = pickupSource === true ? "tap" : pickupSource || "";
+    const clicked = source === "tap" || source === "skill";
     const ammo = createAmmo(piece.type, piece.level, isAmmoUsefulForCurrentOrder(piece.type, piece.level));
     World.remove(game.world, piece.body);
     game.pieces = game.pieces.filter((candidate) => candidate !== piece);
@@ -2918,6 +3041,8 @@
         FOODS[piece.type].color,
         24,
       );
+    } else if (source === "auto") {
+      showFloatingText("자동 보관!", CANNON.x, CANNON.y - 116, FOODS[piece.type].color, 24);
     }
   }
 
@@ -2952,6 +3077,28 @@
     if (!ammo) return;
 
     if (ammo.priority) {
+      if (shouldAutoLoadIntroAmmo(ammo)) {
+        setCannonAmmo(ammo, true);
+        game.cannon.reloadTimer = Math.min(game.cannon.reloadTimer, 0.08);
+        game.cannon.flash = Math.max(game.cannon.flash, 0.18);
+        game.itemMessage = "자동 장전!";
+        game.itemMessageTimer = 1.3;
+        showFloatingText("자동 장전!", CANNON.x, CANNON.y - 112, FOODS[ammo.type].color, 28);
+        const slot = SLOTS.find((candidate) => candidate.type === ammo.type);
+        if (slot) {
+          showFloatingText(
+            `${FOODS[ammo.type].name} 칸에 배달!`,
+            getSlotCenterX(slot),
+            ARENA.slotTop - 36,
+            "#f1c453",
+            30,
+          );
+        }
+        setCharacterReaction(`${FOODS[ammo.type].name} 칸에 배달`, "happy", 1.4);
+        updateUi(false);
+        return;
+      }
+
       game.ammoStash.unshift(ammo);
       game.itemMessage = `${getFoodName(ammo.type, ammo.level)} 배달 준비`;
       game.itemMessageTimer = 1.4;
@@ -2971,6 +3118,10 @@
       setCannonAmmo(createSmartAmmo());
     }
     updateUi(false);
+  }
+
+  function shouldAutoLoadIntroAmmo(ammo) {
+    return !game.tutorialActive && getIntroStep() === "mergeAutoLoad" && isAmmoUsefulForCurrentOrder(ammo.type, ammo.level);
   }
 
   function showAmmoTapHint() {
@@ -3221,6 +3372,7 @@
     piece.pickupReady = false;
     piece.pickupReadyAt = 0;
     piece.pickupExpiresAt = 0;
+    piece.autoPickupAt = 0;
     piece.deliveryReadyUntil = 0;
     Body.setPosition(piece.body, {
       x: CENTER.x + randomRange(-88, 88),
@@ -4413,6 +4565,13 @@
     });
   }
 
+  function isExactOrderAmmo(type, level = 0) {
+    return Object.keys(game.order || {}).some((id) => {
+      const target = parseOrderKey(id);
+      return target.type === type && target.level === level && (game.progress?.[id] || 0) < (game.order?.[id] || 0);
+    });
+  }
+
   function isAmmoRelatedToCurrentOrder(type) {
     return Object.keys(game.order || {}).some((id) => {
       const target = parseOrderKey(id);
@@ -4464,11 +4623,16 @@
     ui.completed.textContent = `${game.completed}`;
     ui.item.textContent = getItemStatusText();
     ui.fever.textContent = getFeverStatusText();
-    ui.skill.textContent = isPortraitLayout() ? "톡" : getSkillButtonText();
+    ui.skill.textContent = isPortraitLayout() ? getPortraitSkillButtonText() : getSkillButtonText();
     if (ui.orderHint) {
       ui.orderHint.textContent = getOrderHintText();
     }
-    ui.skill.disabled = game.skillCooldown > 0 || !game.started || !game.running;
+    ui.skill.disabled =
+      game.skillCooldown > 0 ||
+      !game.started ||
+      !game.running ||
+      game.tutorialActive ||
+      !getPickupSkillCandidates().length;
     updateModeAndRuleUi();
     updateMetaUi();
     updateMobileHud();
@@ -4648,34 +4812,50 @@
 
   function getSkillButtonText() {
     if (game.skillCooldown > 0) {
-      return `톡 ${Math.ceil(game.skillCooldown)}초`;
+      return `집기 ${Math.ceil(game.skillCooldown)}초`;
     }
-    return "톡!";
+    if (game.started && game.running && !game.tutorialActive && !getPickupSkillCandidates().length) {
+      return "회수 없음";
+    }
+    return hasDoublePickupSkill() ? "집기 x2!" : "집기!";
+  }
+
+  function getPortraitSkillButtonText() {
+    if (game.skillCooldown > 0) {
+      return `${Math.ceil(game.skillCooldown)}초`;
+    }
+    if (game.started && game.running && !game.tutorialActive && !getPickupSkillCandidates().length) {
+      return "없음";
+    }
+    return hasDoublePickupSkill() ? "집기x2" : "집기";
   }
 
   function getOrderHintText() {
     if (!game.started) {
-      return "꾹 눌러 발사하고, 깜빡이는 바닥 재료는 직접 탭해 보관하세요.";
+      return "지금 할 일: 밥을 쏴서 위쪽 같은 칸에 넣으세요.";
     }
 
     const pickupPiece = game.pieces.find((piece) => piece.pickupReady && isAmmoUsefulForCurrentOrder(piece.type, piece.level));
     if (pickupPiece) {
-      return `바닥의 ${getFoodName(pickupPiece.type, pickupPiece.level)}를 탭해 보관함으로 보내세요.`;
+      if (shouldAutoPickupPiece(pickupPiece)) {
+        return `지금 할 일: 기다리거나 ${getFoodName(pickupPiece.type, pickupPiece.level)}을 탭해 빨리 보관하세요.`;
+      }
+      return `지금 할 일: 바닥의 ${getFoodName(pickupPiece.type, pickupPiece.level)}를 탭해 보관하세요.`;
     }
 
     const usefulAmmo = game.ammoStash.find((ammo) => ammo && isAmmoUsefulForCurrentOrder(ammo.type, ammo.level));
     if (usefulAmmo) {
-      return `보관함의 ${getFoodName(usefulAmmo.type, usefulAmmo.level)} 배송! 칸을 탭하세요.`;
+      return `지금 할 일: 보관함의 ${getFoodName(usefulAmmo.type, usefulAmmo.level)} 배송! 칸을 탭하세요.`;
     }
 
     const stashMerge = findBestStashMerge();
     if (stashMerge?.useful) {
-      return `보관함 합치기로 ${getFoodName(stashMerge.type, stashMerge.nextLevel)}을 만들 수 있어요.`;
+      return `지금 할 일: 보관함 합치기로 ${getFoodName(stashMerge.type, stashMerge.nextLevel)}을 만드세요.`;
     }
 
     const currentAmmo = getCurrentCannonAmmo();
     if (currentAmmo && isAmmoUsefulForCurrentOrder(currentAmmo.type, currentAmmo.level)) {
-      return `${getFoodName(currentAmmo.type, currentAmmo.level)}을 위 ${FOODS[currentAmmo.type].name} 칸에 배달하세요.`;
+      return `지금 할 일: ${getFoodName(currentAmmo.type, currentAmmo.level)}을 위 ${FOODS[currentAmmo.type].name} 칸에 배달하세요.`;
     }
 
     const id = Object.keys(game.order || {}).find((key) => {
@@ -4685,38 +4865,20 @@
 
     const { type, level } = parseOrderKey(id);
     if (level <= 0) {
-      return `${FOODS[type].name}을 쏴서 위 ${FOODS[type].name} 칸에 넣으세요.`;
+      return `지금 할 일: ${FOODS[type].name}을 쏴서 위 ${FOODS[type].name} 칸에 넣으세요.`;
     }
-    return `${getRecipeHint(type, level)}. 만든 뒤 바닥에서 탭해 보관하세요.`;
+    return `지금 할 일: ${getMergeActionHint(type, level)}.`;
   }
 
   function updateTutorialAssist(dt) {
     if (!game.tutorialActive || game.completed > 0) return;
 
     game.tutorialAssistTimer += dt;
-    if (game.tutorialStep <= 1) {
-      if (game.cannon.loadedType !== "rice" || game.cannon.loadedLevel !== 0) {
-        setCannonAmmo(createAmmo("rice", 0, false));
-      }
-      if (game.cannon.nextType !== "rice" || game.cannon.nextLevel !== 0) {
-        setNextCannonAmmo(createAmmo("rice", 0, false));
-      }
-      if (game.tutorialAssistTimer > 0.6) {
-        spawnTutorialMergeTarget();
-        game.tutorialAssistTimer = 0;
-      }
+    if (game.cannon.loadedType !== "rice" || game.cannon.loadedLevel !== 0) {
+      setCannonAmmo(createAmmo("rice", 0, false));
     }
-
-    if (game.tutorialStep === 2) {
-      const usefulInStash = game.ammoStash.some((ammo) => ammo && isAmmoUsefulForCurrentOrder(ammo.type, ammo.level));
-      const usefulOnBoard = game.pieces.some((piece) => isAmmoUsefulForCurrentOrder(piece.type, piece.level));
-      if (!usefulInStash && !usefulOnBoard && game.tutorialAssistTimer > 1.2) {
-        setCannonAmmo(createAmmo("rice", 0, false));
-        setNextCannonAmmo(createAmmo("rice", 0, false));
-        spawnTutorialMergeTarget();
-        game.tutorialStep = 1;
-        game.tutorialAssistTimer = 0;
-      }
+    if (game.cannon.nextType !== "rice" || game.cannon.nextLevel !== 0) {
+      setNextCannonAmmo(createAmmo("rice", 0, false));
     }
   }
 
@@ -4760,14 +4922,6 @@
       game.tutorialStep = 1;
       game.tutorialAssistTimer = 0;
     }
-    if (game.tutorialStep === 1 && game.runStats.mergeCount > 0) {
-      game.tutorialStep = 2;
-      game.tutorialAssistTimer = 0;
-    }
-    if (game.tutorialStep === 2 && game.cannon.loadedFromStashAt > 0) {
-      game.tutorialStep = 3;
-      game.tutorialAssistTimer = 0;
-    }
   }
 
   function getTutorialMessage() {
@@ -4775,37 +4929,13 @@
 
     if (game.tutorialStep === 0) {
       return {
-        title: "1/5 꾹 눌러 발사",
-        body: "화면을 누르면 힘 게이지가 찹니다. 방향을 맞추고 손을 떼세요.",
-      };
-    }
-    if (game.tutorialStep === 1) {
-      return {
-        title: "2/5 같은 재료 합체",
-        body: "밥을 밥에 맞춰 주먹밥을 만드세요.",
-      };
-    }
-    if (game.tutorialStep === 2) {
-      const hasUsefulAmmo = game.ammoStash.some((ammo) => ammo && isAmmoUsefulForCurrentOrder(ammo.type, ammo.level));
-      const pickupPiece = game.pieces.find(
-        (piece) => piece.pickupReady && isAmmoUsefulForCurrentOrder(piece.type, piece.level),
-      );
-      if (pickupPiece) {
-        return {
-          title: "3/5 바닥 재료 탭",
-          body: "깜빡이는 주먹밥을 탭해 보관함으로 보내세요. 연습 중에는 사라지지 않습니다.",
-        };
-      }
-      return {
-        title: hasUsefulAmmo ? "4/5 보관함 장전" : "3/5 아래 회수대",
-        body: hasUsefulAmmo
-          ? "노란 보관함 칸을 탭해 주먹밥을 장전하세요."
-          : "아래에서 멈춘 재료는 직접 탭해야 보관됩니다. 늦게 누르면 정리됩니다.",
+        title: "1/2 밥을 쏘기",
+        body: "화면을 누른 뒤 위쪽 밥 칸을 향해 손을 떼세요.",
       };
     }
     return {
-      title: "5/5 위 칸에 배달",
-      body: "주먹밥을 위쪽 밥 칸에 넣으면 본 게임이 시작됩니다.",
+      title: "2/2 위 칸에 배달",
+      body: "밥을 위쪽 밥 칸에 잠깐 머물게 하면 본 게임이 시작됩니다.",
     };
   }
 
@@ -5044,7 +5174,8 @@
     ctx.font = "900 13px system-ui, sans-serif";
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
-    ctx.fillText("회수대 · 깜빡이면 탭", CENTER.x, PICKUP_ZONE_TOP + 20);
+    const label = isIntroMergeStep() ? "회수대 · 자동 보관 / 탭하면 빠름" : "회수대 · 깜빡이면 탭";
+    ctx.fillText(label, CENTER.x, PICKUP_ZONE_TOP + 20);
     ctx.restore();
   }
 
