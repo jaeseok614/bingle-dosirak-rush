@@ -2091,7 +2091,9 @@
     game.order = order;
     game.orderIndex = game.completed + 1;
 
-    if (game.pieces.length === 0) {
+    if (isIntroMergeStep()) {
+      spawnStarterIngredients();
+    } else if (game.pieces.length === 0) {
       spawnStarterIngredients();
     }
     if (game.started) {
@@ -2404,9 +2406,16 @@
     const recentHit = Math.max(a.lastPlayerHitAt || 0, b.lastPlayerHitAt || 0);
     if (recentHit <= 0 || now - recentHit > PLAYER_MERGE_WINDOW_MS) return false;
 
+    const openingRiceMerge = isIntroMergeStep() && a.type === "rice" && a.level === 0;
+    if (openingRiceMerge && (a.shot || b.shot || a.tutorialTarget || b.tutorialTarget)) {
+      return true;
+    }
+
     const rvx = a.body.velocity.x - b.body.velocity.x;
     const rvy = a.body.velocity.y - b.body.velocity.y;
-    const threshold = game.tutorialActive && a.type === "rice" && a.level === 0 ? 0.55 : MERGE_MIN_RELATIVE_SPEED;
+    const threshold = (game.tutorialActive || isIntroMergeStep()) && a.type === "rice" && a.level === 0
+      ? 0.45
+      : MERGE_MIN_RELATIVE_SPEED;
     return Math.hypot(rvx, rvy) >= threshold;
   }
 
