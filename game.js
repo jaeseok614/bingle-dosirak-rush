@@ -204,6 +204,14 @@
   const OPENING_ORDER_COUNT = 5;
   const DELIVERY_READY_MS = 5200;
   const TUTORIAL_KEY = "bingle-dosirak-rush-tutorial";
+  const OPENING_ORDER_SPECS = {
+    tutorialDirect: { type: "rice", level: 0 },
+    direct: { type: "rice", level: 0 },
+    mergeAutoLoad: { type: "rice", level: 1 },
+    deliveryTap: { type: "egg", level: 1 },
+    pickupPractice: { type: "kimchi", level: 1 },
+    skillUnlock: { type: "shrimp", level: 1 },
+  };
   const TAU = Math.PI * 2;
   const FIT_TEXT_SELECTOR = [
     ".stat-cell strong",
@@ -1500,6 +1508,61 @@
     fireCannonFromCurrentAim();
   }
 
+  function getPrimaryIncompleteOrder() {
+    const id = Object.keys(game.order || {}).find((key) => {
+      return (game.progress?.[key] || 0) < (game.order?.[key] || 0);
+    });
+    if (!id) return null;
+
+    return {
+      id,
+      ...parseOrderKey(id),
+    };
+  }
+
+  function getOpeningAimTarget(type, level) {
+    if (!isOpeningOrder()) return null;
+
+    const targetOrder = getPrimaryIncompleteOrder();
+    if (!targetOrder || targetOrder.type !== type) return null;
+
+    if (level >= targetOrder.level) {
+      const slot = SLOTS.find((candidate) => candidate.type === type);
+      if (!slot) return null;
+
+      return {
+        x: getSlotCenterX(slot),
+        y: ARENA.slotBottom + 34,
+        power: 0.84,
+      };
+    }
+
+    if (level !== targetOrder.level - 1) return null;
+
+    const targetPiece = [...game.pieces]
+      .filter((piece) => {
+        return (
+          !piece.scored &&
+          !piece.merging &&
+          piece.type === type &&
+          piece.level === level
+        );
+      })
+      .sort((a, b) => {
+        return Number(b.tutorialTarget) - Number(a.tutorialTarget) ||
+          Math.hypot(a.body.position.x - CANNON.x, a.body.position.y - CANNON.y) -
+            Math.hypot(b.body.position.x - CANNON.x, b.body.position.y - CANNON.y);
+      })[0];
+
+    if (!targetPiece) return null;
+
+    return {
+      x: targetPiece.body.position.x,
+      y: targetPiece.body.position.y,
+      power: 0.82,
+    };
+  }
+
   function fireCannonFromCurrentAim() {
     if (!canUseCannon()) return;
 
@@ -1507,6 +1570,13 @@
     const type = game.cannon.loadedType || pickCannonType();
     const level = game.cannon.loadedLevel || 0;
     const fromStash = game.cannon.loadedFromStashAt > 0;
+    const openingAimTarget = getOpeningAimTarget(type, level);
+    if (openingAimTarget) {
+      setCannonAim(
+        Math.atan2(openingAimTarget.y - CANNON.y, openingAimTarget.x - CANNON.x),
+        Math.max(game.cannon.power, openingAimTarget.power),
+      );
+    }
     const speed = CANNON.baseSpeed * (0.76 + game.cannon.power * 0.46) * getCharacterStats().rotate;
     const feverShotCount = game.feverTimer > 0 ? 2 : 1;
     trimCannonBoard();
@@ -1611,8 +1681,9 @@
   }
 
   function createSmartAmmo() {
-    if (getIntroOrderSpec()) {
-      return createAmmo("rice", 0, false);
+    const introOrder = getIntroOrderSpec();
+    if (introOrder) {
+      return createAmmo(introOrder.type, Math.max(0, introOrder.level - 1), false);
     }
 
     return createAmmo(pickCannonType(), 0, false);
@@ -1995,14 +2066,7 @@
   }
 
   function getIntroOrderSpec() {
-    const step = getIntroStep();
-    if (step === "tutorialDirect" || step === "direct") {
-      return { type: "rice", level: 0 };
-    }
-    if (step === "mergeAutoLoad" || step === "deliveryTap" || step === "pickupPractice" || step === "skillUnlock") {
-      return { type: "rice", level: 1 };
-    }
-    return null;
+    return OPENING_ORDER_SPECS[getIntroStep()] || null;
   }
 
   function getOrderCountForPhase(phase) {
@@ -2296,15 +2360,18 @@
   }
 
   function spawnTutorialMergeTarget() {
-    if (game.pieces.some((piece) => piece.type === "rice" && piece.level === 0 && !piece.scored && !piece.merging)) {
+    const spec = getIntroOrderSpec() || { type: "rice", level: 1 };
+    const targetLevel = Math.max(0, spec.level - 1);
+
+    if (game.pieces.some((piece) => piece.type === spec.type && piece.level === targetLevel && !piece.scored && !piece.merging)) {
       return;
     }
 
     const piece = spawnIngredient(
-      "rice",
+      spec.type,
       0,
       1,
-      0,
+      targetLevel,
       {
         x: CENTER.x,
         y: CENTER.y + 26,
@@ -2406,14 +2473,14 @@
     const recentHit = Math.max(a.lastPlayerHitAt || 0, b.lastPlayerHitAt || 0);
     if (recentHit <= 0 || now - recentHit > PLAYER_MERGE_WINDOW_MS) return false;
 
-    const openingRiceMerge = isIntroMergeStep() && a.type === "rice" && a.level === 0;
-    if (openingRiceMerge && (a.shot || b.shot || a.tutorialTarget || b.tutorialTarget)) {
+    const openingGuidedMerge = isIntroMergeStep() && a.type === b.type && a.level === 0;
+    if (openingGuidedMerge && (a.shot || b.shot || a.tutorialTarget || b.tutorialTarget)) {
       return true;
     }
 
     const rvx = a.body.velocity.x - b.body.velocity.x;
     const rvy = a.body.velocity.y - b.body.velocity.y;
-    const threshold = (game.tutorialActive || isIntroMergeStep()) && a.type === "rice" && a.level === 0
+    const threshold = (game.tutorialActive || isIntroMergeStep()) && a.level === 0
       ? 0.45
       : MERGE_MIN_RELATIVE_SPEED;
     return Math.hypot(rvx, rvy) >= threshold;
@@ -3295,10 +3362,7 @@
 
   function shouldAutoLoadPriorityAmmo(ammo) {
     if (game.tutorialActive) return false;
-    if (getIntroStep() === "mergeAutoLoad") return true;
-    if (getIntroStep() === "deliveryTap" || getIntroStep() === "pickupPractice" || getIntroStep() === "skillUnlock") {
-      return false;
-    }
+    if (isOpeningOrder()) return true;
 
     const current = getCurrentCannonAmmo();
     return !current || !isAmmoUsefulForCurrentOrder(current.type, current.level);
@@ -5209,14 +5273,14 @@
     if (game.tutorialStep === 0) {
       return {
         title: "밥을 밥 칸에 넣으세요",
-        body: "밝게 깜빡이는 위쪽 밥 칸을 향해 쏘세요.",
+        body: "노란 칸을 향해 쏘면 다음 안내가 나옵니다.",
         focus: "slot",
         slotType: "rice",
       };
     }
     return {
       title: "잘했어요. 위 칸에 머물면 배달!",
-      body: "배달이 끝나면 바로 본 게임이 시작됩니다.",
+      body: "밥이 칸 안에 들어가면 연습 완료입니다.",
       focus: "slot",
       slotType: "rice",
     };
@@ -5299,28 +5363,47 @@
     }
 
     ctx.save();
-    ctx.fillStyle = "rgba(255, 255, 255, 0.94)";
+    const boxX = CENTER.x - 270;
+    const boxY = ARENA.slotBottom + 12;
+    const boxWidth = 540;
+    const boxHeight = 96;
+
+    ctx.fillStyle = "rgba(255, 255, 255, 0.95)";
     ctx.strokeStyle = "rgba(241, 196, 83, 0.82)";
     ctx.lineWidth = 3;
     ctx.shadowColor = "rgba(24, 49, 43, 0.18)";
     ctx.shadowBlur = 16;
-    roundRect(CENTER.x - 250, ARENA.slotBottom + 14, 500, 84, 14);
+    roundRect(boxX, boxY, boxWidth, boxHeight, 16);
     ctx.fill();
     ctx.stroke();
     ctx.shadowColor = "transparent";
 
-    ctx.fillStyle = "#1f5145";
-    ctx.font = "950 23px system-ui, sans-serif";
+    const character = CHARACTERS[meta.selectedCharacter] || CHARACTERS.cook;
+    ctx.fillStyle = character.color;
+    ctx.strokeStyle = "#ffffff";
+    ctx.lineWidth = 5;
+    ctx.beginPath();
+    ctx.arc(boxX + 45, boxY + 48, 25, 0, TAU);
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = "#ffffff";
+    ctx.font = "950 17px system-ui, sans-serif";
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
-    ctx.fillText(message.title, CENTER.x, ARENA.slotBottom + 42);
+    ctx.fillText(character.short || "요", boxX + 45, boxY + 48);
+
+    ctx.fillStyle = "#1f5145";
+    ctx.font = "950 23px system-ui, sans-serif";
+    ctx.textAlign = "left";
+    ctx.textBaseline = "middle";
+    ctx.fillText(message.title, boxX + 86, boxY + 32);
     ctx.fillStyle = "#62756e";
     ctx.font = "850 15px system-ui, sans-serif";
-    ctx.fillText(message.body, CENTER.x, ARENA.slotBottom + 68);
+    ctx.fillText(message.body, boxX + 86, boxY + 58);
 
     ctx.fillStyle = "#2c9aa0";
     ctx.font = "950 12px system-ui, sans-serif";
-    ctx.fillText("캐릭터 말풍선과 노란 칸만 보면 됩니다", CENTER.x, ARENA.slotBottom + 88);
+    ctx.fillText("가운데 안내와 깜빡이는 대상만 보면 됩니다", boxX + 86, boxY + 80);
     ctx.restore();
   }
 
@@ -5879,6 +5962,29 @@
     const now = performance.now();
     const pickupRemaining = piece.pickupReady ? piece.pickupExpiresAt - now : Infinity;
     const pickupBlink = piece.pickupReady && pickupRemaining <= PICKUP_BLINK_MS;
+
+    if (piece.tutorialTarget && isIntroMergeStep()) {
+      const pulse = 0.55 + Math.sin(now / 110) * 0.45;
+      ctx.save();
+      ctx.translate(body.position.x, body.position.y - lift);
+      ctx.strokeStyle = "#f1c453";
+      ctx.lineWidth = 6 + pulse * 5;
+      ctx.shadowColor = "rgba(241, 196, 83, 0.7)";
+      ctx.shadowBlur = 12 + pulse * 18;
+      ctx.beginPath();
+      ctx.arc(0, 0, radius + 18 + pulse * 6, 0, TAU);
+      ctx.stroke();
+      ctx.shadowColor = "transparent";
+      ctx.fillStyle = "#18312b";
+      ctx.strokeStyle = "rgba(255, 255, 255, 0.95)";
+      ctx.lineWidth = 4;
+      ctx.font = "950 13px system-ui, sans-serif";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.strokeText("여기를 맞추세요", 0, -radius - 34);
+      ctx.fillText("여기를 맞추세요", 0, -radius - 34);
+      ctx.restore();
+    }
 
     ctx.save();
     if (pickupBlink) {

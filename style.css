@@ -1582,7 +1582,11 @@ body.is-debug .action-panel .balance-button {
   }
 
   .touch-zones {
-    pointer-events: none;
+    pointer-events: auto;
+  }
+
+  .touch-zone {
+    pointer-events: auto;
   }
 
   .result-modal,
