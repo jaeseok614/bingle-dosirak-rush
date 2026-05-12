@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>빙글도시락 캐논</title>
     <link rel="icon" href="favicon.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="style.css?v=20260512-ammo-clarity" />
+    <link rel="stylesheet" href="style.css?v=20260512-simplified-core" />
   </head>
   <body>
     <main class="app-shell" aria-label="빙글도시락 캐논">
@@ -129,12 +129,12 @@
                 <div class="guide-step">
                   <span class="guide-icon guide-dot" aria-hidden="true"></span>
                   <strong>같은 재료 합체</strong>
-                  <p>같은 재료 두 개가 닿으면 한 단계 큰 음식이 됩니다. 주문 재료면 바로 배송 준비로 올라갑니다.</p>
+                  <p>같은 재료 두 개가 닿으면 한 단계 큰 음식이 됩니다. 주문 재료면 현재탄이 바로 커지거나 배송 준비로 모입니다.</p>
                 </div>
                 <div class="guide-step">
                   <span class="guide-icon guide-item" aria-hidden="true">▣</span>
                   <strong>배송 준비</strong>
-                  <p>합치거나 회수한 주문 재료는 자동으로 모입니다. 배송 준비를 누르면 바로 다시 쏠 수 있습니다.</p>
+                  <p>현재탄이 이미 준비됐다면 바로 쏘고, 추가 주문 재료는 노란 배송 준비에 모였다가 다시 쏠 수 있습니다.</p>
                 </div>
                 <div class="guide-step">
                   <span class="guide-icon guide-ring" aria-hidden="true"></span>
@@ -298,7 +298,7 @@
             </div>
           </div>
           <button id="mobileDeliveryReadyButton" class="mobile-delivery-button" type="button" hidden>배송 준비</button>
-          <div class="stash-title">보관함 · 탭해서 장전</div>
+          <div class="stash-title">추가 재료</div>
           <div class="mobile-stash-buttons">
             <button type="button" data-mobile-stash-index="0">비움</button>
             <button type="button" data-mobile-stash-index="1">비움</button>
@@ -318,6 +318,6 @@
     </main>
 
     <script src="vendor/matter.min.js"></script>
-    <script src="game.js?v=20260512-ammo-clarity"></script>
+    <script src="game.js?v=20260512-simplified-core"></script>
   </body>
 </html>

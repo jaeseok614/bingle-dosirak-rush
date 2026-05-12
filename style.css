@@ -843,6 +843,11 @@ h1 {
   pointer-events: none;
 }
 
+.tutorial-coach.is-stash-action {
+  top: 18px;
+  bottom: auto;
+}
+
 body.is-tutorial-coach .action-panel {
   display: none;
 }
@@ -1905,7 +1910,8 @@ body.is-debug .action-panel .balance-button {
 
   .tutorial-coach.is-stash-action {
     position: fixed;
-    bottom: calc(118px + env(safe-area-inset-bottom));
+    top: calc(74px + env(safe-area-inset-top));
+    bottom: auto;
     z-index: 18;
   }
 

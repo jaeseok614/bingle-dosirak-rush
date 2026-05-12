@@ -244,10 +244,10 @@
     },
     {
       id: "readyDelivery",
-      text: "주문에 맞는 음식으로 합쳐지면 바로 배송 준비로 올라와. 이제 다시 쏠 수 있어.",
+      text: "같은 재료를 맞추면 현재탄이 바로 커져. 이제 주먹밥을 다시 쏠 수 있어.",
       wait: "next",
-      highlight: ["deliveryReady"],
-      reaction: "배송 준비!",
+      highlight: ["currentAmmo"],
+      reaction: "현재탄 업그레이드!",
     },
     {
       id: "deliverRiceball",
@@ -256,14 +256,6 @@
       setup: "preparedDelivery",
       highlight: ["currentAmmo", "slot:rice"],
       reaction: "주먹밥은 밥 칸!",
-    },
-    {
-      id: "stashTap",
-      text: "노란 배송 준비를 눌러 장전해보자.",
-      wait: "stashTap",
-      setup: "stashTap",
-      highlight: ["deliveryReady"],
-      reaction: "노란 배송 준비를 눌러요",
     },
     {
       id: "scoreTips",
@@ -2222,11 +2214,11 @@
   }
 
   function shouldShowStashUi() {
-    return game.completed >= 3 || game.ammoStash.length > 0;
+    return false;
   }
 
   function shouldAllowStashMerge() {
-    return game.completed >= OPENING_ORDER_COUNT;
+    return false;
   }
 
   function shouldAllowActionExtras() {
@@ -2326,6 +2318,10 @@
 
     game.order = order;
     game.orderIndex = game.completed + 1;
+
+    if (introOrder) {
+      clearIngredients();
+    }
 
     if (isIntroMergeStep()) {
       spawnStarterIngredients();
@@ -2535,7 +2531,16 @@
     const spec = getIntroOrderSpec() || { type: "rice", level: 1 };
     const targetLevel = Math.max(0, spec.level - 1);
 
-    if (game.pieces.some((piece) => piece.type === spec.type && piece.level === targetLevel && !piece.scored && !piece.merging)) {
+    if (
+      game.pieces.some(
+        (piece) =>
+          piece.tutorialTarget &&
+          piece.type === spec.type &&
+          piece.level === targetLevel &&
+          !piece.scored &&
+          !piece.merging,
+      )
+    ) {
       return;
     }
 
@@ -2884,8 +2889,8 @@
     const ammo = createAmmo(merged.type, merged.level, true);
     World.remove(game.world, merged.body);
     game.pieces = game.pieces.filter((piece) => piece !== merged);
-    game.deliveryReadyAmmo = ammo;
-    game.itemMessage = `${getFoodName(ammo.type, ammo.level)} 배송 준비`;
+    loadPreparedAmmo(ammo, `${getFoodName(ammo.type, ammo.level)} 완성!`);
+    game.itemMessage = `${getFoodName(ammo.type, ammo.level)} 완성`;
     game.itemMessageTimer = 1.4;
     completeTutorialAction("merge");
     return true;
@@ -3541,7 +3546,7 @@
         addScore(pickupScore, "item");
       }
       showFloatingText(
-        pickupScore > 0 ? `재료 확보! +${pickupScore}` : "보관함으로!",
+        pickupScore > 0 ? `재료 확보! +${pickupScore}` : "재료 정리",
         CANNON.x,
         CANNON.y - 116,
         FOODS[piece.type].color,
@@ -3586,25 +3591,14 @@
       if (routePriorityAmmo(ammo)) {
         return;
       }
-
-      game.ammoStash.unshift(ammo);
-      game.itemMessage = `${getFoodName(ammo.type, ammo.level)} 배달 준비`;
-      game.itemMessageTimer = 1.4;
-      showFloatingText("보관!", CANNON.x, CANNON.y - 112, FOODS[ammo.type].color, 26);
-      showAmmoTapHint();
-      if (game.tutorialActive && game.completed === 0) {
-        game.tutorialStep = Math.max(game.tutorialStep, 2);
-        game.running = false;
-        setCharacterReaction("배송! 칸을 탭", "happy", 1.8);
-      }
-    } else {
-      game.ammoStash.push(ammo);
+      return;
     }
 
-    trimAmmoStash();
     if (!game.cannon.loadedType) {
       setCannonAmmo(createSmartAmmo());
     }
+    game.itemMessage = "재료 정리";
+    game.itemMessageTimer = 0.9;
     updateUi(false);
   }
 
@@ -3629,15 +3623,11 @@
   }
 
   function setDeliveryReadyAmmo(ammo) {
-    if (game.deliveryReadyAmmo && shouldShowStashUi()) {
-      game.ammoStash.unshift(game.deliveryReadyAmmo);
-      trimAmmoStash();
-    }
-
     game.deliveryReadyAmmo = ammo;
     game.itemMessage = `${getFoodName(ammo.type, ammo.level)} 배송 준비`;
     game.itemMessageTimer = 1.4;
     showFloatingText("배송 준비!", CANNON.x, CANNON.y - 112, FOODS[ammo.type].color, 28);
+    showAmmoTapHint();
     setCharacterReaction("배송 준비!", "happy", 1.25);
     updateUi(false);
   }
@@ -3647,14 +3637,14 @@
 
     game.ammoHintShown = true;
     if (isPortraitLayout()) {
-      showFloatingText("아래 보관함 탭!", CANNON.x, CANNON.y - 112, "#f1c453", 26);
-      setCharacterReaction("보관함을 눌러 장전", "happy", 1.6);
+      showFloatingText("아래 배송 준비 탭!", CANNON.x, CANNON.y - 112, "#f1c453", 26);
+      setCharacterReaction("배송 준비를 눌러 장전", "happy", 1.6);
       return;
     }
 
-    const rect = getAmmoSlotRects()[0];
-    showFloatingText("탭해서 장전!", rect.centerX, rect.y - 12, "#f1c453", 26);
-    setCharacterReaction("보관함을 눌러 장전", "happy", 1.6);
+    const rect = getDeliveryReadyRect();
+    showFloatingText("노란 배송 준비 탭!", rect.x + rect.width / 2, rect.y - 12, "#f1c453", 26);
+    setCharacterReaction("배송 준비를 눌러 장전", "happy", 1.6);
   }
 
   function canMergeAmmo(a, b) {
@@ -5483,22 +5473,12 @@
       return "배송 준비를 탭하세요.";
     }
 
-    const usefulAmmo = game.ammoStash.find((ammo) => ammo && isAmmoUsefulForCurrentOrder(ammo.type, ammo.level));
-    if (usefulAmmo) {
-      return "노란 배송 준비를 탭하세요.";
-    }
-
     const pickupPiece = game.pieces.find((piece) => piece.pickupReady && isAmmoUsefulForCurrentOrder(piece.type, piece.level));
     if (pickupPiece) {
       if (shouldAutoPickupPiece(pickupPiece)) {
         return `${getFoodShortLabel(pickupPiece.type, pickupPiece.level)}을 탭하면 빨라요.`;
       }
       return "깜빡이는 재료를 탭하세요.";
-    }
-
-    const stashMerge = shouldAllowStashMerge() ? findBestStashMerge() : null;
-    if (stashMerge?.useful) {
-      return "합치기를 누르세요.";
     }
 
     const id = Object.keys(game.order || {}).find((key) => {
@@ -5595,7 +5575,6 @@
     if (!step) return "연습을 준비하세요";
     if (step.wait === "deliver") return step.id === "directDelivery" ? "밥 칸에 넣으세요" : "밥 칸에 배달하세요";
     if (step.wait === "merge") return "가운데 밥을 맞추세요";
-    if (step.wait === "stashTap") return "노란 배송 준비를 누르세요";
     if (step.wait === "finish") return "연습 끝";
     return "화살표를 눌러 다음으로";
   }
@@ -5648,19 +5627,10 @@
 
     if (step.setup === "preparedDelivery") {
       setupTutorialOrder("rice", 1);
-      const ammo = game.deliveryReadyAmmo || createAmmo("rice", 1, true);
-      game.deliveryReadyAmmo = null;
-      loadPreparedAmmo(ammo, "배송 준비!");
+      const ammo = getCurrentCannonAmmo() || createAmmo("rice", 1, true);
+      loadPreparedAmmo(ammo, "주먹밥 완성!");
       setNextCannonAmmo(createAmmo("rice", 0, false));
       return;
-    }
-
-    if (step.setup === "stashTap") {
-      setupTutorialOrder("egg", 1);
-      game.deliveryReadyAmmo = createAmmo("egg", 1, true);
-      setCannonAmmo(createAmmo("rice", 0, false));
-      setNextCannonAmmo(createAmmo("egg", 0, false));
-      updateUi(false);
     }
   }
 
@@ -5781,7 +5751,7 @@
       setCannonAmmo(createAmmo(target.type, level, false));
       setNextCannonAmmo(createAmmo(target.type, level, false));
     }
-    game.running = wait !== "stashTap";
+    game.running = true;
     game.lastFrame = 0;
     setCharacterReaction(getTutorialHintText(), "happy", 1.5);
     syncTutorialCoachUi();
