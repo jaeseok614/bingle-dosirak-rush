@@ -558,7 +558,7 @@
 
   const FOOD_KEYS = Object.keys(FOODS);
   const FOOD_EVOLUTIONS = {
-    rice: ["밥알", "주먹밥", "김밥", "특제 도시락"],
+    rice: ["밥", "주먹밥", "김밥", "특제 도시락"],
     egg: ["계란", "계란말이", "오믈렛", "계란 도시락"],
     kimchi: ["김치", "볶음김치", "김치볶음밥", "매운 도시락"],
     nori: ["김", "김말이", "김 주먹밥", "바삭 도시락"],
@@ -1257,7 +1257,7 @@
     resetControls();
     ui.guideOverlay.hidden = true;
     ui.characterSelectOverlay.hidden = true;
-    setCharacterReaction("꾹 눌러 발사", "happy", 1.6);
+    setCharacterReaction(game.tutorialActive ? "노란 밥 칸을 보고 쏴요" : "꾹 눌러 발사", "happy", game.tutorialActive ? 2.4 : 1.6);
   }
 
   function showGuide() {
@@ -2196,7 +2196,7 @@
     if (safeLevel <= 0) return "바로 배달";
 
     const previous = getFoodName(type, safeLevel - 1);
-    return `${previous} + ${previous} = ${getFoodName(type, safeLevel)}`;
+    return `${previous}끼리 맞추기`;
   }
 
   function getMergeActionHint(type, level = 0) {
@@ -5104,6 +5104,11 @@
       return "밥 칸에 넣으세요.";
     }
 
+    const tutorialMessage = getTutorialMessage();
+    if (tutorialMessage) {
+      return tutorialMessage.title;
+    }
+
     const currentAmmo = getCurrentCannonAmmo();
     if (currentAmmo && isAmmoUsefulForCurrentOrder(currentAmmo.type, currentAmmo.level)) {
       return `${FOODS[currentAmmo.type].name} 칸에 넣으세요.`;
@@ -5194,6 +5199,7 @@
     if (game.tutorialStep === 0 && game.cannon.shotCount > 0) {
       game.tutorialStep = 1;
       game.tutorialAssistTimer = 0;
+      setCharacterReaction("좋아요! 밥 칸에 들어가면 끝", "happy", 2.4);
     }
   }
 
@@ -5202,13 +5208,17 @@
 
     if (game.tutorialStep === 0) {
       return {
-        title: "1/2 밥을 쏘기",
-        body: "화면을 누른 뒤 위쪽 밥 칸을 향해 손을 떼세요.",
+        title: "밥을 밥 칸에 넣으세요",
+        body: "밝게 깜빡이는 위쪽 밥 칸을 향해 쏘세요.",
+        focus: "slot",
+        slotType: "rice",
       };
     }
     return {
-      title: "2/2 위 칸에 배달",
-      body: "밥을 위쪽 밥 칸에 잠깐 머물게 하면 본 게임이 시작됩니다.",
+      title: "잘했어요. 위 칸에 머물면 배달!",
+      body: "배달이 끝나면 바로 본 게임이 시작됩니다.",
+      focus: "slot",
+      slotType: "rice",
     };
   }
 
@@ -5227,6 +5237,7 @@
     drawParticles();
     drawDeliveryStamps();
     drawFloatingTexts();
+    drawCenterOrderCue();
     drawTutorialCoach();
     drawFeverOverlay();
   }
@@ -5273,22 +5284,77 @@
     const message = getTutorialMessage();
     if (!message || !game.started || game.timeLeft <= 0 || !ui.guideOverlay.hidden || !ui.modal.hidden) return;
 
+    const pulse = 0.5 + Math.sin(performance.now() / 130) * 0.5;
+    const slot = SLOTS.find((candidate) => candidate.type === message.slotType);
+    if (slot) {
+      const bounds = getSlotBounds(slot);
+      ctx.save();
+      ctx.strokeStyle = "#f1c453";
+      ctx.lineWidth = 8 + pulse * 4;
+      ctx.shadowColor = "rgba(241, 196, 83, 0.62)";
+      ctx.shadowBlur = 18 + pulse * 18;
+      roundRect(bounds.left - 8, ARENA.slotTop - 8, bounds.right - bounds.left + 16, ARENA.slotBottom - ARENA.slotTop + 16, 16);
+      ctx.stroke();
+      ctx.restore();
+    }
+
     ctx.save();
-    ctx.fillStyle = "rgba(255, 255, 255, 0.9)";
-    ctx.strokeStyle = "rgba(47, 109, 91, 0.26)";
+    ctx.fillStyle = "rgba(255, 255, 255, 0.94)";
+    ctx.strokeStyle = "rgba(241, 196, 83, 0.82)";
     ctx.lineWidth = 3;
-    roundRect(CENTER.x - 230, ARENA.slotBottom + 16, 460, 72, 14);
+    ctx.shadowColor = "rgba(24, 49, 43, 0.18)";
+    ctx.shadowBlur = 16;
+    roundRect(CENTER.x - 250, ARENA.slotBottom + 14, 500, 84, 14);
     ctx.fill();
     ctx.stroke();
+    ctx.shadowColor = "transparent";
 
     ctx.fillStyle = "#1f5145";
-    ctx.font = "950 22px system-ui, sans-serif";
+    ctx.font = "950 23px system-ui, sans-serif";
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
     ctx.fillText(message.title, CENTER.x, ARENA.slotBottom + 42);
     ctx.fillStyle = "#62756e";
     ctx.font = "850 15px system-ui, sans-serif";
-    ctx.fillText(message.body, CENTER.x, ARENA.slotBottom + 66);
+    ctx.fillText(message.body, CENTER.x, ARENA.slotBottom + 68);
+
+    ctx.fillStyle = "#2c9aa0";
+    ctx.font = "950 12px system-ui, sans-serif";
+    ctx.fillText("캐릭터 말풍선과 노란 칸만 보면 됩니다", CENTER.x, ARENA.slotBottom + 88);
+    ctx.restore();
+  }
+
+  function drawCenterOrderCue() {
+    if (!game.started || game.timeLeft <= 0 || !ui.guideOverlay.hidden || !ui.modal.hidden || game.tutorialActive) return;
+
+    const id = Object.keys(game.order || {}).find((key) => {
+      return (game.progress?.[key] || 0) < (game.order?.[key] || 0);
+    });
+    if (!id) return;
+
+    const { type, level } = parseOrderKey(id);
+    const done = game.progress?.[id] || 0;
+    const amount = game.order?.[id] || 1;
+    const title = `${getFoodName(type, level)} → ${FOODS[type].name} 칸`;
+    const action = getShortActionHint();
+    const y = ARENA.slotBottom + 16;
+
+    ctx.save();
+    ctx.fillStyle = "rgba(255, 255, 255, 0.9)";
+    ctx.strokeStyle = "rgba(47, 109, 91, 0.24)";
+    ctx.lineWidth = 3;
+    roundRect(CENTER.x - 205, y, 410, 62, 12);
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.fillStyle = "#1f5145";
+    ctx.font = "950 18px system-ui, sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(`${title} · ${done}/${amount}`, CENTER.x, y + 22);
+    ctx.fillStyle = "#2c9aa0";
+    ctx.font = "950 14px system-ui, sans-serif";
+    ctx.fillText(`지금: ${action}`, CENTER.x, y + 44);
     ctx.restore();
   }
 
