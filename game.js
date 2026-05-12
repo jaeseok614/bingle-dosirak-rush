@@ -1662,7 +1662,7 @@
       return {
         x: getSlotCenterX(slot),
         y: ARENA.slotBottom + 34,
-        power: 0.84,
+        power: game.tutorialActive ? 1 : 0.84,
       };
     }
 
@@ -1706,7 +1706,16 @@
         Math.max(game.cannon.power, openingAimTarget.power),
       );
     }
-    const speed = CANNON.baseSpeed * (0.76 + game.cannon.power * 0.46) * getCharacterStats().rotate;
+    const tutorialDeliveryShot = Boolean(
+      game.tutorialActive &&
+        isTutorialActionAllowed("deliver") &&
+        getDeliverableOrderId({ type, level }),
+    );
+    const speed =
+      CANNON.baseSpeed *
+      (0.76 + game.cannon.power * 0.46) *
+      getCharacterStats().rotate *
+      (tutorialDeliveryShot ? 1.18 : 1);
     const feverShotCount = game.feverTimer > 0 ? 2 : 1;
     trimCannonBoard();
     markFirstInput();
@@ -1759,7 +1768,8 @@
     markPlayerHit(piece, timestamp);
     piece.bump = 0.28;
     if (game.tutorialActive && isTutorialActionAllowed("deliver") && getDeliverableOrderId(piece)) {
-      piece.tutorialAutoDeliverAt = timestamp + 850;
+      piece.tutorialAutoDeliverAt = timestamp + 1050;
+      piece.tutorialGuideUntil = timestamp + 1150;
     }
     return piece;
   }
@@ -2995,6 +3005,8 @@
       const slot = SLOTS.find((candidate) => candidate.type === piece.type);
       if (!slot) continue;
 
+      if (guideTutorialDeliveryShot(piece, slot)) continue;
+
       if (piece.body.position.y > ARENA.bottom - 58) continue;
 
       const dx = getSlotCenterX(slot) - piece.body.position.x;
@@ -3022,6 +3034,35 @@
         y: (dy / pullDistance) * strength,
       });
     }
+  }
+
+  function guideTutorialDeliveryShot(piece, slot) {
+    if (
+      !game.tutorialActive ||
+      !isTutorialActionAllowed("deliver") ||
+      !piece.tutorialGuideUntil ||
+      performance.now() > piece.tutorialGuideUntil
+    ) {
+      return false;
+    }
+
+    const target = {
+      x: getSlotCenterX(slot),
+      y: slot.y + 8,
+    };
+    const body = piece.body;
+    const dx = target.x - body.position.x;
+    const dy = target.y - body.position.y;
+    const distance = Math.max(1, Math.hypot(dx, dy));
+    const guidedSpeed = isPortraitLayout() ? 24 : 22;
+    const blend = 0.46;
+
+    Body.setVelocity(body, {
+      x: body.velocity.x * (1 - blend) + (dx / distance) * guidedSpeed * blend,
+      y: body.velocity.y * (1 - blend) + (dy / distance) * guidedSpeed * blend,
+    });
+    Body.setAngularVelocity(body, body.angularVelocity * 0.62);
+    return true;
   }
 
   function getMergeCandidateTarget(piece) {
