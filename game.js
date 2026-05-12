@@ -484,7 +484,7 @@
     {
       id: "specialChance",
       label: "특수 주문 빈도",
-      detail: "빠른 주문, 금지칸 주문 같은 변형 주문 확률입니다.",
+      detail: "빠른 주문, 깔끔 주문 같은 변형 주문 확률입니다.",
       min: 0.15,
       max: 0.75,
       step: 0.05,
@@ -719,7 +719,6 @@
     ORDER_RULES.protein,
     ORDER_RULES.heavy,
     ORDER_RULES.slippery,
-    ORDER_RULES.forbidden,
   ];
   const EARLY_SPECIAL_RULES = [ORDER_RULES.spicy];
   const MID_SPECIAL_RULES = [
@@ -2152,7 +2151,7 @@
   }
 
   function pickOrderRule() {
-    if (game.completed < OPENING_ORDER_COUNT) return ORDER_RULES.normal;
+    if (game.completed < 8) return ORDER_RULES.normal;
     const phaseChance = getRushConfig().specialChance;
     const tunedChance = phaseChance * (meta.balance.specialChance / DEFAULT_BALANCE.specialChance);
     if (game.orderRng() > clamp(tunedChance, 0, 0.75)) return ORDER_RULES.normal;
@@ -2161,7 +2160,7 @@
   }
 
   function getSpecialRulePool() {
-    if (game.completed < 9) return EARLY_SPECIAL_RULES;
+    if (game.completed < 10) return EARLY_SPECIAL_RULES;
     if (game.completed < 12) return MID_SPECIAL_RULES;
     return SPECIAL_RULES;
   }
@@ -3747,7 +3746,7 @@
     const modeText = game.mode === "daily" ? `오늘의 도시락 #${game.dailyDate}` : "일반 모드";
     const score = Math.round(game.score).toLocaleString("ko-KR");
     const combo = Math.max(1, game.maxCombo - 1);
-    return `빙글도시락 러시 ${score}점 / 도시락 ${game.completed}개 / 최고 콤보 x${combo} / ${getCharacter().name} / ${modeText} / 너도 해봐!`;
+    return `빙글도시락 캐논 ${score}점 / 도시락 ${game.completed}개 / 최고 콤보 x${combo} / ${getCharacter().name} / ${modeText} / 너도 해봐!`;
   }
 
   function getNextGoalText() {
