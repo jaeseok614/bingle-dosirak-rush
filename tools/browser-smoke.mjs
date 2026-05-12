@@ -366,9 +366,9 @@ async function playGuidedTutorialRun(client) {
         return {
           coachHidden: !coach || coach.hidden,
           nextDisabled: !next || next.disabled,
-          nextText: next?.textContent.trim() || '',
           waitingAction: Boolean(coach?.classList.contains('is-waiting-action')),
           deliveryVisible: Boolean(dock && !dock.hidden && delivery && !delivery.hidden && !delivery.disabled),
+          deliveryHighlighted: Boolean(delivery?.classList.contains('is-tutorial-target')),
           gameOver: !document.querySelector('#gameOver').hidden,
         };
       })()`,
@@ -397,13 +397,10 @@ async function playGuidedTutorialRun(client) {
       continue;
     }
 
-    if (!state.nextDisabled && state.nextText === "선택") {
-      await click(client, "#tutorialCoachNext");
-      await sleep(420);
-      continue;
-    }
-
     if (state.deliveryVisible) {
+      if (!state.deliveryHighlighted) {
+        throw new Error("Tutorial delivery button was visible but not highlighted");
+      }
       await click(client, "#mobileDeliveryReadyButton");
       await sleep(420);
       continue;

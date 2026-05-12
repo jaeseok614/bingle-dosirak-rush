@@ -257,11 +257,11 @@
     },
     {
       id: "stashTap",
-      text: "노란 배송! 칸이나 선택 버튼을 눌러봐. 현재탄으로 바뀌어.",
+      text: "노란 배송 준비를 눌러 장전해보자.",
       wait: "stashTap",
       setup: "stashTap",
       highlight: ["deliveryReady"],
-      reaction: "노란 배송! 칸을 눌러요",
+      reaction: "노란 배송 준비를 눌러요",
     },
     {
       id: "outro",
@@ -2541,6 +2541,8 @@
     );
     piece.tutorialTarget = true;
     piece.lastPlayerHitAt = performance.now();
+    Body.setStatic(piece.body, true);
+    Body.setVelocity(piece.body, { x: 0, y: 0 });
     Body.setAngularVelocity(piece.body, 0);
   }
 
@@ -5242,7 +5244,10 @@
       ui.modal.hidden &&
       (Boolean(game.deliveryReadyAmmo) || shouldShowStashUi());
     ui.mobileAmmoDock.hidden = !showDock;
-    if (!showDock) return;
+    if (!showDock) {
+      ui.mobileDeliveryReady?.classList.remove("is-tutorial-target");
+      return;
+    }
 
     const current = getCurrentCannonAmmo();
     const next = getNextCannonAmmo();
@@ -5254,6 +5259,7 @@
       ui.mobileDeliveryReady.hidden = !ammo;
       ui.mobileDeliveryReady.disabled = !ammo;
       ui.mobileDeliveryReady.textContent = ammo ? `${getFoodName(ammo.type, ammo.level)} 배송 준비` : "배송 준비";
+      ui.mobileDeliveryReady.classList.toggle("is-tutorial-target", Boolean(ammo && isMobileDeliveryReadyTutorialTarget()));
     }
 
     ui.mobileAmmoDock.classList.toggle("is-stash-hidden", !shouldShowStashUi());
@@ -5282,6 +5288,16 @@
       ui.mobileStashMerge.disabled =
         !allowMerge || !shouldShowStashUi() || !game.started || game.timeLeft <= 0 || !canMerge || !ui.guideOverlay.hidden || !ui.modal.hidden;
     }
+  }
+
+  function isMobileDeliveryReadyTutorialTarget() {
+    const step = getTutorialCoachStep();
+    return Boolean(
+      game.tutorialActive &&
+        isPortraitLayout() &&
+        step?.highlight?.includes("deliveryReady") &&
+        game.deliveryReadyAmmo,
+    );
   }
 
   function scheduleFitText() {
@@ -5403,7 +5419,7 @@
 
     const usefulAmmo = game.ammoStash.find((ammo) => ammo && isAmmoUsefulForCurrentOrder(ammo.type, ammo.level));
     if (usefulAmmo) {
-      return "노란 배송! 칸을 탭하세요.";
+      return "노란 배송 준비를 탭하세요.";
     }
 
     const pickupPiece = game.pieces.find((piece) => piece.pickupReady && isAmmoUsefulForCurrentOrder(piece.type, piece.level));
@@ -5416,7 +5432,7 @@
 
     const stashMerge = shouldAllowStashMerge() ? findBestStashMerge() : null;
     if (stashMerge?.useful) {
-      return "보관함 합치기를 누르세요.";
+      return "합치기를 누르세요.";
     }
 
     const id = Object.keys(game.order || {}).find((key) => {
@@ -5513,7 +5529,7 @@
     if (!step) return "연습을 준비하세요";
     if (step.wait === "deliver") return step.id === "directDelivery" ? "밥 칸에 넣으세요" : "밥 칸에 배달하세요";
     if (step.wait === "merge") return "가운데 밥을 맞추세요";
-    if (step.wait === "stashTap") return "노란 배송! 칸을 누르세요";
+    if (step.wait === "stashTap") return "노란 배송 준비를 누르세요";
     if (step.wait === "finish") return "연습 끝";
     return "화살표를 눌러 다음으로";
   }
@@ -5644,13 +5660,11 @@
 
     const step = getTutorialCoachStep();
     const waitingAction = Boolean(step && step.wait !== "next" && step.wait !== "finish" && game.tutorialActionReady);
-    const waitingStashTap = Boolean(step?.wait === "stashTap" && game.tutorialActionReady);
-    ui.tutorialCoach.classList.toggle("is-stash-action", waitingStashTap);
-    ui.tutorialCoachNext.disabled = !game.tutorialTextDone || (waitingAction && !waitingStashTap);
-    ui.tutorialCoachNext.textContent = waitingStashTap ? "선택" : step?.wait === "finish" ? "시작" : "→";
+    ui.tutorialCoachNext.disabled = !game.tutorialTextDone || waitingAction;
+    ui.tutorialCoachNext.textContent = step?.wait === "finish" ? "시작" : "→";
     ui.tutorialCoachNext.setAttribute(
       "aria-label",
-      waitingStashTap ? "배송 준비 선택" : step?.wait === "finish" ? "본 게임 시작" : "다음",
+      step?.wait === "finish" ? "본 게임 시작" : "다음",
     );
   }
 
@@ -5661,10 +5675,6 @@
     event.stopPropagation();
     if (!game.tutorialTextDone) {
       finishTutorialTyping();
-      return;
-    }
-    if (game.tutorialActionReady && game.tutorialWait === "stashTap") {
-      selectDeliveryReadyAmmo();
       return;
     }
     if (game.tutorialActionReady) return;
@@ -5853,6 +5863,8 @@
       }
 
       if (highlight === "deliveryReady" && game.deliveryReadyAmmo) {
+        if (isPortraitLayout()) continue;
+
         const rect = getDeliveryReadyRect();
         shapes.push({
           kind: "rect",
