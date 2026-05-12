@@ -133,7 +133,7 @@
       cannon: {
         y: 650,
         dragDistance: 170,
-        baseSpeed: 17.4,
+        baseSpeed: 18.8,
       },
     },
   };
@@ -1662,7 +1662,7 @@
       return {
         x: getSlotCenterX(slot),
         y: ARENA.slotBottom + 34,
-        power: game.tutorialActive ? 1 : 0.84,
+        power: 1,
       };
     }
 
@@ -1711,11 +1711,16 @@
         isTutorialActionAllowed("deliver") &&
         getDeliverableOrderId({ type, level }),
     );
+    const openingDeliveryShot = Boolean(
+      !game.tutorialActive &&
+        isOpeningOrder() &&
+        getDeliverableOrderId({ type, level }),
+    );
     const speed =
       CANNON.baseSpeed *
       (0.76 + game.cannon.power * 0.46) *
       getCharacterStats().rotate *
-      (tutorialDeliveryShot ? 1.18 : 1);
+      (tutorialDeliveryShot ? 1.18 : openingDeliveryShot ? 1.14 : 1);
     const feverShotCount = game.feverTimer > 0 ? 2 : 1;
     trimCannonBoard();
     markFirstInput();
@@ -3009,7 +3014,8 @@
 
       if (guideTutorialDeliveryShot(piece, slot)) continue;
 
-      if (piece.body.position.y > ARENA.bottom - 58) continue;
+      const openingDeliveryPiece = !game.tutorialActive && isOpeningOrder();
+      if (piece.body.position.y > ARENA.bottom - 58 && !openingDeliveryPiece) continue;
 
       const dx = getSlotCenterX(slot) - piece.body.position.x;
       const dy = slot.y - piece.body.position.y;
@@ -6098,14 +6104,20 @@
     const flash = cannon.flash / 0.28;
     const ready = game.started && game.timeLeft > 0 && ui.modal.hidden;
     const barrelRotation = cannon.angle + Math.PI / 2;
+    const launcherWood = "#b9804a";
+    const launcherWoodDark = "#7a4f2b";
+    const launcherCream = "#fff3cf";
+    const launcherMint = "#9dd9bf";
+    const launcherMintDark = "#2f6d5b";
+    const launcherShadow = "rgba(24, 49, 43, 0.2)";
     const muzzle = {
-      x: CANNON.x + Math.cos(cannon.angle) * 36,
-      y: CANNON.y + Math.sin(cannon.angle) * 36,
+      x: CANNON.x + Math.cos(cannon.angle) * 42,
+      y: CANNON.y + Math.sin(cannon.angle) * 42,
     };
 
     ctx.save();
     if (ready) {
-      ctx.fillStyle = cannon.aiming ? "#f1c453" : "rgba(47, 109, 91, 0.62)";
+      ctx.fillStyle = cannon.aiming ? "#f1c453" : "rgba(47, 109, 91, 0.58)";
       const step = 24 + cannon.power * 8;
       for (let i = 1; i <= 10; i += 1) {
         const distance = i * step;
@@ -6124,31 +6136,66 @@
 
     ctx.translate(CANNON.x, CANNON.y);
     ctx.rotate(barrelRotation);
-    ctx.shadowColor = flash > 0 ? "rgba(241, 196, 83, 0.7)" : "rgba(24, 49, 43, 0.22)";
-    ctx.shadowBlur = 12 + flash * 22;
-    ctx.fillStyle = flash > 0 ? "#f1c453" : "#244f45";
-    ctx.strokeStyle = flash > 0 ? "#ffffff" : "rgba(255, 255, 255, 0.78)";
-    ctx.lineWidth = 5;
-    roundRect(-19, -68, 38, 82, 18);
+    ctx.shadowColor = flash > 0 ? "rgba(241, 196, 83, 0.52)" : launcherShadow;
+    ctx.shadowBlur = 12 + flash * 16;
+    ctx.fillStyle = launcherWood;
+    ctx.strokeStyle = launcherWoodDark;
+    ctx.lineWidth = 4;
+    roundRect(-8, -52, 16, 76, 10);
     ctx.fill();
     ctx.stroke();
+
     ctx.shadowColor = "transparent";
-    ctx.fillStyle = "#18312b";
-    roundRect(-12, -60, 24, 54, 12);
+    ctx.fillStyle = flash > 0 ? "#fff7da" : launcherCream;
+    ctx.strokeStyle = flash > 0 ? "#f1c453" : launcherMintDark;
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.ellipse(0, -58, 24, 31, 0, 0, TAU);
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.strokeStyle = "rgba(255, 255, 255, 0.82)";
+    ctx.lineWidth = 2.4;
+    ctx.beginPath();
+    ctx.ellipse(-5, -63, 10, 16, -0.25, 0, TAU);
+    ctx.stroke();
+    ctx.fillStyle = launcherMint;
+    ctx.beginPath();
+    ctx.arc(0, 3, 7, 0, TAU);
     ctx.fill();
     ctx.restore();
 
     ctx.save();
-    ctx.fillStyle = "#10231f";
-    ctx.strokeStyle = "#2f6d5b";
-    ctx.lineWidth = 6;
-    ctx.beginPath();
-    ctx.arc(CANNON.x, CANNON.y + 10, 38 + flash * 7, Math.PI, 0);
-    ctx.lineTo(CANNON.x + 54, CANNON.y + 42);
-    ctx.lineTo(CANNON.x - 54, CANNON.y + 42);
-    ctx.closePath();
+    ctx.fillStyle = launcherCream;
+    ctx.strokeStyle = launcherMintDark;
+    ctx.lineWidth = 5;
+    roundRect(CANNON.x - 58, CANNON.y + 12, 116, 34, 14);
     ctx.fill();
     ctx.stroke();
+
+    ctx.fillStyle = launcherMint;
+    ctx.strokeStyle = "rgba(255, 255, 255, 0.82)";
+    ctx.lineWidth = 3;
+    roundRect(CANNON.x - 68, CANNON.y + 24, 22, 16, 8);
+    ctx.fill();
+    ctx.stroke();
+    roundRect(CANNON.x + 46, CANNON.y + 24, 22, 16, 8);
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.fillStyle = launcherWood;
+    ctx.strokeStyle = launcherWoodDark;
+    ctx.lineWidth = 3;
+    roundRect(CANNON.x - 26, CANNON.y - 4, 52, 24, 12);
+    ctx.fill();
+    ctx.stroke();
+
+    if (flash > 0) {
+      ctx.fillStyle = "rgba(241, 196, 83, 0.34)";
+      ctx.beginPath();
+      ctx.arc(CANNON.x, CANNON.y + 9, 34 + flash * 6, 0, TAU);
+      ctx.fill();
+    }
     ctx.restore();
 
     drawCannonPowerGauge();
