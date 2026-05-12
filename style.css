@@ -546,6 +546,16 @@ h1 {
   padding: 8px;
 }
 
+.ammo-status > div.is-active-turn {
+  border-color: rgba(241, 196, 83, 0.9);
+  background: linear-gradient(135deg, #fff1b6, #fff9dd);
+  box-shadow: 0 0 0 3px rgba(241, 196, 83, 0.22);
+}
+
+.ammo-status > div.is-dimmed {
+  opacity: 0.56;
+}
+
 .ammo-status span,
 .stash-title {
   display: block;
@@ -575,6 +585,16 @@ h1 {
   font-size: 0.86rem;
   font-weight: 950;
   animation: stashPulse 680ms ease-in-out infinite alternate;
+}
+
+.mobile-delivery-button.is-active-turn {
+  color: #18312b;
+  background: linear-gradient(135deg, #f1c453, #fff1b6);
+  border-color: rgba(241, 196, 83, 1);
+  box-shadow:
+    0 0 0 4px rgba(241, 196, 83, 0.24),
+    0 10px 22px rgba(155, 116, 35, 0.22);
+  transform: translateY(-1px);
 }
 
 .mobile-delivery-button.is-tutorial-target {
@@ -610,6 +630,16 @@ h1 {
 .mobile-ammo-dock.is-stash-hidden .mobile-stash-buttons,
 .mobile-ammo-dock.is-stash-hidden .mobile-merge-button {
   display: none;
+}
+
+.mobile-ammo-dock.is-delivery-turn {
+  border-color: rgba(241, 196, 83, 0.48);
+  box-shadow: 0 -8px 22px rgba(241, 196, 83, 0.18);
+}
+
+.mobile-ammo-dock.is-current-turn {
+  border-color: rgba(44, 154, 160, 0.34);
+  box-shadow: 0 -8px 22px rgba(44, 154, 160, 0.14);
 }
 
 .mobile-stash-buttons button {

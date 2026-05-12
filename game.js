@@ -34,6 +34,8 @@
     mobileScoreText: document.querySelector("#mobileScoreText"),
     mobileComboText: document.querySelector("#mobileComboText"),
     mobileAmmoDock: document.querySelector("#mobileAmmoDock"),
+    mobileCurrentPanel: document.querySelector("#mobileCurrentPanel"),
+    mobileNextPanel: document.querySelector("#mobileNextPanel"),
     mobileCurrentAmmo: document.querySelector("#mobileCurrentAmmo"),
     mobileNextAmmo: document.querySelector("#mobileNextAmmo"),
     mobileDeliveryReady: document.querySelector("#mobileDeliveryReadyButton"),
@@ -5277,6 +5279,15 @@
     ui.mobileOrderHud.classList.toggle("is-paused", game.awaitingFirstInput);
   }
 
+  function hasUsefulCurrentAmmo() {
+    const current = getCurrentCannonAmmo();
+    return Boolean(current && isAmmoUsefulForCurrentOrder(current.type, current.level));
+  }
+
+  function shouldPromptDeliveryReadyTap() {
+    return !hasUsefulCurrentAmmo() && Boolean(game.deliveryReadyAmmo);
+  }
+
   function renderMobileAmmoDock() {
     if (!ui.mobileAmmoDock) return;
 
@@ -5289,19 +5300,31 @@
     ui.mobileAmmoDock.hidden = !showDock;
     if (!showDock) {
       ui.mobileDeliveryReady?.classList.remove("is-tutorial-target");
+      ui.mobileDeliveryReady?.classList.remove("is-active-turn");
+      ui.mobileAmmoDock.classList.remove("is-current-turn", "is-delivery-turn");
+      ui.mobileCurrentPanel?.classList.remove("is-active-turn", "is-dimmed");
+      ui.mobileNextPanel?.classList.remove("is-dimmed");
       return;
     }
 
     const current = getCurrentCannonAmmo();
     const next = getNextCannonAmmo();
+    const currentUseful = Boolean(current && isAmmoUsefulForCurrentOrder(current.type, current.level));
+    const promptDeliveryReady = shouldPromptDeliveryReadyTap();
     ui.mobileCurrentAmmo.textContent = current ? getFoodName(current.type, current.level) : "-";
     ui.mobileNextAmmo.textContent = next ? getFoodName(next.type, next.level) : "-";
+    ui.mobileAmmoDock.classList.toggle("is-current-turn", currentUseful);
+    ui.mobileAmmoDock.classList.toggle("is-delivery-turn", promptDeliveryReady);
+    ui.mobileCurrentPanel?.classList.toggle("is-active-turn", currentUseful);
+    ui.mobileCurrentPanel?.classList.toggle("is-dimmed", promptDeliveryReady);
+    ui.mobileNextPanel?.classList.toggle("is-dimmed", promptDeliveryReady);
 
     if (ui.mobileDeliveryReady) {
       const ammo = game.deliveryReadyAmmo;
       ui.mobileDeliveryReady.hidden = !ammo;
       ui.mobileDeliveryReady.disabled = !ammo;
-      ui.mobileDeliveryReady.textContent = ammo ? `${getFoodName(ammo.type, ammo.level)} 배송 준비` : "배송 준비";
+      ui.mobileDeliveryReady.textContent = ammo ? `${promptDeliveryReady ? "지금 배송" : "배송 준비"} · ${getFoodName(ammo.type, ammo.level)}` : "배송 준비";
+      ui.mobileDeliveryReady.classList.toggle("is-active-turn", Boolean(ammo && promptDeliveryReady));
       ui.mobileDeliveryReady.classList.toggle("is-tutorial-target", Boolean(ammo && isMobileDeliveryReadyTutorialTarget()));
     }
 
@@ -6140,6 +6163,8 @@
     const loadedType = cannon.loadedType || FOOD_KEYS[0];
     const flash = cannon.flash / 0.28;
     const ready = game.started && game.timeLeft > 0 && ui.modal.hidden;
+    const currentUseful = hasUsefulCurrentAmmo();
+    const promptDeliveryReady = shouldPromptDeliveryReadyTap();
     const barrelRotation = cannon.angle + Math.PI / 2;
     const launcherWood = "#b9804a";
     const launcherWoodDark = "#7a4f2b";
@@ -6238,7 +6263,7 @@
     drawCannonPowerGauge();
 
     if (loadedType) {
-      drawSmallBadge("현재", muzzle.x, muzzle.y - 34, "#2f6d5b");
+      drawSmallBadge(currentUseful ? "지금 쏘기" : "현재", muzzle.x, muzzle.y - 34, currentUseful ? "#f1c453" : "#2f6d5b", currentUseful ? "#18312b" : "#ffffff");
       drawIngredient({
         type: loadedType,
         level: cannon.loadedLevel || 0,
@@ -6248,6 +6273,15 @@
         forbiddenHold: 0,
         wrongHold: 0,
       });
+      if (!currentUseful && promptDeliveryReady) {
+        ctx.save();
+        ctx.globalAlpha = 0.38;
+        ctx.fillStyle = "rgba(24, 49, 43, 0.18)";
+        ctx.beginPath();
+        ctx.arc(muzzle.x, muzzle.y, 26, 0, TAU);
+        ctx.fill();
+        ctx.restore();
+      }
     }
 
     if (cannon.nextType) {
@@ -6297,16 +6331,17 @@
     const mergeButton = getStashMergeButtonRect();
     const allowMerge = shouldAllowStashMerge();
     const canMergeStash = allowMerge && Boolean(findBestStashMerge());
+    const promptDeliveryReady = shouldPromptDeliveryReadyTap();
 
     if (game.deliveryReadyAmmo) {
       const ammo = game.deliveryReadyAmmo;
       const pulse = 0.5 + Math.sin(performance.now() / 120) * 0.22;
       ctx.save();
-      ctx.fillStyle = "#fff1b6";
-      ctx.strokeStyle = "#f1c453";
-      ctx.lineWidth = 4 + pulse * 2;
-      ctx.shadowColor = "rgba(241, 196, 83, 0.42)";
-      ctx.shadowBlur = 12 + pulse * 12;
+      ctx.fillStyle = promptDeliveryReady ? "#fff1b6" : "#fff8da";
+      ctx.strokeStyle = promptDeliveryReady ? "#f1c453" : "rgba(241, 196, 83, 0.78)";
+      ctx.lineWidth = promptDeliveryReady ? 5 + pulse * 3 : 4 + pulse * 2;
+      ctx.shadowColor = promptDeliveryReady ? "rgba(241, 196, 83, 0.62)" : "rgba(241, 196, 83, 0.42)";
+      ctx.shadowBlur = promptDeliveryReady ? 18 + pulse * 18 : 12 + pulse * 12;
       roundRect(deliveryRect.x, deliveryRect.y, deliveryRect.width, deliveryRect.height, 13);
       ctx.fill();
       ctx.stroke();
@@ -6316,6 +6351,9 @@
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
       ctx.fillText(`${getFoodShortLabel(ammo.type, ammo.level)} 배송 준비`, deliveryRect.x + deliveryRect.width / 2, deliveryRect.y + deliveryRect.height / 2);
+      if (promptDeliveryReady) {
+        drawSmallBadge("지금 탭", deliveryRect.x + deliveryRect.width / 2, deliveryRect.y - 16, "#f1c453", "#18312b");
+      }
       ctx.restore();
     }
 
