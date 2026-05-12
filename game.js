@@ -35,6 +35,7 @@
     mobileAmmoDock: document.querySelector("#mobileAmmoDock"),
     mobileCurrentAmmo: document.querySelector("#mobileCurrentAmmo"),
     mobileNextAmmo: document.querySelector("#mobileNextAmmo"),
+    mobileDeliveryReady: document.querySelector("#mobileDeliveryReadyButton"),
     mobileStashButtons: [...document.querySelectorAll("[data-mobile-stash-index]")],
     mobileStashMerge: document.querySelector("#mobileStashMergeButton"),
     missionList: document.querySelector("#missionList"),
@@ -198,6 +199,7 @@
   const PICKUP_TUTORIAL_MS = Number.POSITIVE_INFINITY;
   const PICKUP_BLINK_MS = 1800;
   const INTRO_AUTO_PICKUP_DELAY_MS = 900;
+  const OPENING_ORDER_COUNT = 5;
   const DELIVERY_READY_MS = 5200;
   const TUTORIAL_KEY = "bingle-dosirak-rush-tutorial";
   const TAU = Math.PI * 2;
@@ -717,7 +719,7 @@
     ORDER_RULES.slippery,
     ORDER_RULES.forbidden,
   ];
-  const EARLY_SPECIAL_RULES = [ORDER_RULES.spicy, ORDER_RULES.protein, ORDER_RULES.heavy, ORDER_RULES.slippery];
+  const EARLY_SPECIAL_RULES = [ORDER_RULES.spicy];
   const MID_SPECIAL_RULES = [
     ORDER_RULES.fast,
     ORDER_RULES.clean,
@@ -749,6 +751,7 @@
     particles: [],
     floatingTexts: [],
     ammoStash: [],
+    deliveryReadyAmmo: null,
     score: 0,
     combo: 1,
     maxCombo: 1,
@@ -788,6 +791,7 @@
     lastRushPhase: 0,
     closingCallShown: false,
     ammoHintShown: false,
+    skillUnlockShown: false,
     shotSerial: 0,
     shotStreak: 0,
     orderStreak: 0,
@@ -1016,6 +1020,14 @@
   }
 
   function handleMobileAmmoDockClick(event) {
+    const deliveryButton = event.target.closest("#mobileDeliveryReadyButton");
+    if (deliveryButton) {
+      event.preventDefault();
+      unlockAudio();
+      selectDeliveryReadyAmmo();
+      return;
+    }
+
     const button = event.target.closest("[data-mobile-stash-index]");
     if (!button) return;
 
@@ -1181,6 +1193,7 @@
     game.breakdown = createBreakdown();
     game.runStats = createRunStats();
     game.ammoStash = [];
+    game.deliveryReadyAmmo = null;
     game.timeLeft = tutorialRun ? 20 : GAME_SECONDS + getCharacterStats().startTime;
     game.elapsed = 0;
     game.timeBonusUsed = 0;
@@ -1210,6 +1223,7 @@
     game.lastCoinAward = 0;
     game.lastShareText = "";
     game.ammoHintShown = false;
+    game.skillUnlockShown = false;
     game.tutorialRun = tutorialRun;
     game.tutorialActive = shouldRun && (forceTutorial || (!skipTutorial && !isTutorialComplete()));
     game.tutorialStep = 0;
@@ -1289,7 +1303,7 @@
   }
 
   function useSkill() {
-    if (!game.running || game.skillCooldown > 0 || game.tutorialActive) return;
+    if (!game.running || game.skillCooldown > 0 || game.tutorialActive || !shouldUnlockSkill()) return;
 
     unlockAudio();
 
@@ -1661,6 +1675,16 @@
     };
   }
 
+  function getDeliveryReadyRect() {
+    const slots = getAmmoSlotRects();
+    return {
+      x: CENTER.x - 152,
+      y: slots[0].y - 31,
+      width: 136,
+      height: 28,
+    };
+  }
+
   function isPointInRect(point, rect) {
     return (
       point.x >= rect.x &&
@@ -1673,6 +1697,7 @@
   function triggerStashMergeAtPoint(point) {
     if (game.cannon.charging) return false;
     if (!game.started || game.timeLeft <= 0 || isBlockingOverlayOpen() || !ui.guideOverlay.hidden) return false;
+    if (!shouldShowStashUi()) return false;
     if (!isPointInRect(point, getStashMergeButtonRect())) return false;
 
     mergeBestStashAmmo();
@@ -1682,6 +1707,8 @@
   function selectAmmoSlotAtPoint(point) {
     if (game.cannon.charging) return false;
     if (!game.started || game.timeLeft <= 0 || isBlockingOverlayOpen() || !ui.guideOverlay.hidden) return false;
+    if (selectDeliveryReadyAtPoint(point)) return true;
+    if (!shouldShowStashUi()) return false;
 
     const slot = getAmmoSlotRects().find((rect) => {
       return (
@@ -1694,6 +1721,14 @@
     if (!slot) return false;
 
     return selectAmmoFromStash(slot.index);
+  }
+
+  function selectDeliveryReadyAtPoint(point) {
+    if (!game.deliveryReadyAmmo) return false;
+    if (!isPointInRect(point, getDeliveryReadyRect())) return false;
+
+    selectDeliveryReadyAmmo();
+    return true;
   }
 
   function selectAmmoFromStash(index) {
@@ -1735,6 +1770,42 @@
     vibrate(8);
     updateUi(false);
     return true;
+  }
+
+  function selectDeliveryReadyAmmo() {
+    const selected = game.deliveryReadyAmmo;
+    if (!selected) return false;
+
+    game.deliveryReadyAmmo = null;
+    loadPreparedAmmo(selected, "배송 준비!");
+    return true;
+  }
+
+  function loadPreparedAmmo(ammo, label = "자동 장전!") {
+    const current = getCurrentCannonAmmo();
+    if (current && shouldShowStashUi() && (current.type !== ammo.type || current.level !== ammo.level)) {
+      game.ammoStash.push(current);
+      trimAmmoStash();
+    }
+
+    setCannonAmmo(ammo, true);
+    game.cannon.reloadTimer = Math.min(game.cannon.reloadTimer, 0.08);
+    game.cannon.flash = Math.max(game.cannon.flash, 0.18);
+    game.itemMessage = label;
+    game.itemMessageTimer = 1.3;
+    showFloatingText(label, CANNON.x, CANNON.y - 112, FOODS[ammo.type].color, 28);
+    const slot = SLOTS.find((candidate) => candidate.type === ammo.type);
+    if (slot) {
+      showFloatingText(
+        `${FOODS[ammo.type].name} 칸에 배달!`,
+        getSlotCenterX(slot),
+        ARENA.slotTop - 36,
+        "#f1c453",
+        30,
+      );
+    }
+    setCharacterReaction(`${FOODS[ammo.type].name} 칸에 배달`, "happy", 1.4);
+    updateUi(false);
   }
 
   function collectPickupPieceAtPoint(point) {
@@ -1887,13 +1958,27 @@
     if (game.tutorialActive && game.completed === 0) return "tutorialDirect";
     if (game.completed === 0) return "direct";
     if (game.completed === 1) return "mergeAutoLoad";
-    if (game.completed === 2) return "stashTap";
+    if (game.completed === 2) return "deliveryTap";
+    if (game.completed === 3) return "pickupPractice";
+    if (game.completed === 4) return "skillUnlock";
     return "normal";
   }
 
   function isIntroMergeStep() {
     const step = getIntroStep();
-    return step === "mergeAutoLoad" || step === "stashTap";
+    return step === "mergeAutoLoad" || step === "deliveryTap" || step === "pickupPractice" || step === "skillUnlock";
+  }
+
+  function isOpeningOrder() {
+    return game.tutorialActive || game.completed < OPENING_ORDER_COUNT;
+  }
+
+  function shouldShowStashUi() {
+    return game.completed >= 3 || game.ammoStash.length > 0;
+  }
+
+  function shouldUnlockSkill() {
+    return !game.tutorialActive && game.completed >= 4;
   }
 
   function getIntroOrderSpec() {
@@ -1901,7 +1986,7 @@
     if (step === "tutorialDirect" || step === "direct") {
       return { type: "rice", level: 0 };
     }
-    if (step === "mergeAutoLoad" || step === "stashTap") {
+    if (step === "mergeAutoLoad" || step === "deliveryTap" || step === "pickupPractice" || step === "skillUnlock") {
       return { type: "rice", level: 1 };
     }
     return null;
@@ -1909,8 +1994,8 @@
 
   function getOrderCountForPhase(phase) {
     if (phase <= 0) return 1;
-    if (phase === 1) return game.completed >= 4 ? 2 : 1;
-    return game.completed >= 8 ? 3 : 2;
+    if (phase === 1) return game.completed >= 8 ? 2 : 1;
+    return game.completed >= 12 ? 3 : 2;
   }
 
   function getNeededOrderTypes() {
@@ -1953,6 +2038,7 @@
     game.orderHadWrong = false;
     game.orderHadForbiddenHit = false;
     game.forbiddenType = "";
+    game.deliveryReadyAmmo = null;
     game.orderRule = pickOrderRule();
     const introOrder = getIntroOrderSpec();
     const foodPool = game.orderRule.foods || FOOD_KEYS;
@@ -2006,6 +2092,13 @@
         setNextCannonAmmo(createSmartAmmo());
       }
     }
+    if (game.started && getIntroStep() === "skillUnlock" && !game.skillUnlockShown) {
+      game.skillUnlockShown = true;
+      game.itemMessage = "집기 해금!";
+      game.itemMessageTimer = 1.8;
+      showFloatingText("집기 해금!", CENTER.x, CANNON.y - 118, "#f1c453", 32);
+      setCharacterReaction("집기도 쓸 수 있어요", "happy", 1.6);
+    }
     updateUi(true);
   }
 
@@ -2048,7 +2141,7 @@
   }
 
   function pickOrderRule() {
-    if (game.completed < 3) return ORDER_RULES.normal;
+    if (game.completed < 6) return ORDER_RULES.normal;
     const phaseChance = getRushConfig().specialChance;
     const tunedChance = phaseChance * (meta.balance.specialChance / DEFAULT_BALANCE.specialChance);
     if (game.orderRng() > clamp(tunedChance, 0, 0.75)) return ORDER_RULES.normal;
@@ -2057,8 +2150,8 @@
   }
 
   function getSpecialRulePool() {
-    if (game.completed < 6) return EARLY_SPECIAL_RULES;
-    if (game.completed < 8) return MID_SPECIAL_RULES;
+    if (game.completed < 9) return EARLY_SPECIAL_RULES;
+    if (game.completed < 12) return MID_SPECIAL_RULES;
     return SPECIAL_RULES;
   }
 
@@ -2093,10 +2186,10 @@
 
   function getMergeActionHint(type, level = 0) {
     const safeLevel = clamp(Math.round(level), 0, MAX_FOOD_LEVEL);
-    if (safeLevel <= 0) return `${FOODS[type].name}을 위 ${FOODS[type].name} 칸에 넣으세요`;
+    if (safeLevel <= 0) return `${FOODS[type].name} 칸에 넣으세요`;
 
     const previous = getFoodName(type, safeLevel - 1);
-    return `${previous}끼리 맞춰 ${getFoodName(type, safeLevel)}을 만드세요`;
+    return `${previous}끼리 맞추세요`;
   }
 
   function getFoodLevelConfig(type, level = 0) {
@@ -2623,8 +2716,16 @@
       const aimScale = xGap <= SLOT_WIDTH * 1.15 ? 1.25 : recentShot ? 0.78 : 0.48;
       const feverScale = game.feverTimer > 0 ? 1.36 : 1;
       const tutorialScale = game.tutorialActive ? 1.8 : 1;
+      const openingScale = isOpeningOrder() ? 1.55 : 1;
       const strength =
-        0.00016 * slotScale * aimScale * getRushConfig().deliveryAssist * feverScale * tutorialScale * piece.body.mass;
+        0.00016 *
+        slotScale *
+        aimScale *
+        getRushConfig().deliveryAssist *
+        feverScale *
+        tutorialScale *
+        openingScale *
+        piece.body.mass;
 
       Body.applyForce(piece.body, piece.body.position, {
         x: (dx / pullDistance) * strength,
@@ -2969,7 +3070,8 @@
   }
 
   function getDeliveryHoldSeconds() {
-    return game.tutorialActive ? 0.08 : DELIVERY_HOLD_SECONDS;
+    if (isOpeningOrder()) return 0.05;
+    return DELIVERY_HOLD_SECONDS;
   }
 
   function getPickupSettleSeconds() {
@@ -3006,7 +3108,6 @@
   function shouldAutoPickupPiece(piece) {
     return (
       !game.tutorialActive &&
-      (getIntroStep() === "mergeAutoLoad" || getIntroStep() === "stashTap") &&
       isAmmoUsefulForCurrentOrder(piece.type, piece.level)
     );
   }
@@ -3077,25 +3178,7 @@
     if (!ammo) return;
 
     if (ammo.priority) {
-      if (shouldAutoLoadIntroAmmo(ammo)) {
-        setCannonAmmo(ammo, true);
-        game.cannon.reloadTimer = Math.min(game.cannon.reloadTimer, 0.08);
-        game.cannon.flash = Math.max(game.cannon.flash, 0.18);
-        game.itemMessage = "자동 장전!";
-        game.itemMessageTimer = 1.3;
-        showFloatingText("자동 장전!", CANNON.x, CANNON.y - 112, FOODS[ammo.type].color, 28);
-        const slot = SLOTS.find((candidate) => candidate.type === ammo.type);
-        if (slot) {
-          showFloatingText(
-            `${FOODS[ammo.type].name} 칸에 배달!`,
-            getSlotCenterX(slot),
-            ARENA.slotTop - 36,
-            "#f1c453",
-            30,
-          );
-        }
-        setCharacterReaction(`${FOODS[ammo.type].name} 칸에 배달`, "happy", 1.4);
-        updateUi(false);
+      if (routePriorityAmmo(ammo)) {
         return;
       }
 
@@ -3120,8 +3203,41 @@
     updateUi(false);
   }
 
-  function shouldAutoLoadIntroAmmo(ammo) {
-    return !game.tutorialActive && getIntroStep() === "mergeAutoLoad" && isAmmoUsefulForCurrentOrder(ammo.type, ammo.level);
+  function routePriorityAmmo(ammo) {
+    if (!isAmmoUsefulForCurrentOrder(ammo.type, ammo.level)) return false;
+
+    if (shouldAutoLoadPriorityAmmo(ammo)) {
+      loadPreparedAmmo(ammo);
+      return true;
+    }
+
+    setDeliveryReadyAmmo(ammo);
+    return true;
+  }
+
+  function shouldAutoLoadPriorityAmmo(ammo) {
+    if (game.tutorialActive) return false;
+    if (getIntroStep() === "mergeAutoLoad") return true;
+    if (getIntroStep() === "deliveryTap" || getIntroStep() === "pickupPractice" || getIntroStep() === "skillUnlock") {
+      return false;
+    }
+
+    const current = getCurrentCannonAmmo();
+    return !current || !isAmmoUsefulForCurrentOrder(current.type, current.level);
+  }
+
+  function setDeliveryReadyAmmo(ammo) {
+    if (game.deliveryReadyAmmo && shouldShowStashUi()) {
+      game.ammoStash.unshift(game.deliveryReadyAmmo);
+      trimAmmoStash();
+    }
+
+    game.deliveryReadyAmmo = ammo;
+    game.itemMessage = `${getFoodName(ammo.type, ammo.level)} 배송 준비`;
+    game.itemMessageTimer = 1.4;
+    showFloatingText("배송 준비!", CANNON.x, CANNON.y - 112, FOODS[ammo.type].color, 28);
+    setCharacterReaction("배송 준비!", "happy", 1.25);
+    updateUi(false);
   }
 
   function showAmmoTapHint() {
@@ -4603,8 +4719,9 @@
     const windowScale = getRushConfig().deliveryWindow;
     const feverScale = game.feverTimer > 0 ? 1.12 : 1;
     const tutorialScale = game.tutorialActive ? 1.28 : 1;
-    const extra = body.circleRadius * 1.25 * windowScale * feverScale * tutorialScale;
-    const xExtra = body.circleRadius * 0.95 * windowScale * feverScale * tutorialScale;
+    const openingScale = isOpeningOrder() ? 1.18 : 1;
+    const extra = body.circleRadius * 1.25 * windowScale * feverScale * tutorialScale * openingScale;
+    const xExtra = body.circleRadius * 0.95 * windowScale * feverScale * tutorialScale * openingScale;
     if (body.position.y < ARENA.slotTop - extra || body.position.y > ARENA.slotBottom + extra) return null;
 
     for (const slot of SLOTS) {
@@ -4627,11 +4744,13 @@
     if (ui.orderHint) {
       ui.orderHint.textContent = getOrderHintText();
     }
+    ui.skill.hidden = !shouldUnlockSkill();
     ui.skill.disabled =
       game.skillCooldown > 0 ||
       !game.started ||
       !game.running ||
       game.tutorialActive ||
+      !shouldUnlockSkill() ||
       !getPickupSkillCandidates().length;
     updateModeAndRuleUi();
     updateMetaUi();
@@ -4708,17 +4827,36 @@
   function renderMobileAmmoDock() {
     if (!ui.mobileAmmoDock) return;
 
+    const showDock =
+      game.started &&
+      game.timeLeft > 0 &&
+      ui.guideOverlay.hidden &&
+      ui.modal.hidden &&
+      (Boolean(game.deliveryReadyAmmo) || shouldShowStashUi());
+    ui.mobileAmmoDock.hidden = !showDock;
+    if (!showDock) return;
+
     const current = getCurrentCannonAmmo();
     const next = getNextCannonAmmo();
     ui.mobileCurrentAmmo.textContent = current ? getFoodName(current.type, current.level) : "-";
     ui.mobileNextAmmo.textContent = next ? getFoodName(next.type, next.level) : "-";
+
+    if (ui.mobileDeliveryReady) {
+      const ammo = game.deliveryReadyAmmo;
+      ui.mobileDeliveryReady.hidden = !ammo;
+      ui.mobileDeliveryReady.disabled = !ammo;
+      ui.mobileDeliveryReady.textContent = ammo ? `${getFoodName(ammo.type, ammo.level)} 배송 준비` : "배송 준비";
+    }
+
+    ui.mobileAmmoDock.classList.toggle("is-stash-hidden", !shouldShowStashUi());
 
     for (const button of ui.mobileStashButtons) {
       const index = Number(button.dataset.mobileStashIndex);
       const ammo = game.ammoStash[index];
       const useful = ammo && isAmmoUsefulForCurrentOrder(ammo.type, ammo.level);
       button.classList.toggle("is-needed", Boolean(useful));
-      button.disabled = !game.started || game.timeLeft <= 0 || !ammo || !ui.guideOverlay.hidden || !ui.modal.hidden;
+      button.disabled =
+        !shouldShowStashUi() || !game.started || game.timeLeft <= 0 || !ammo || !ui.guideOverlay.hidden || !ui.modal.hidden;
       button.textContent = ammo
         ? `${getFoodName(ammo.type, ammo.level)}${useful ? "\n배송!" : ""}`
         : "비움";
@@ -4732,7 +4870,7 @@
     if (ui.mobileStashMerge) {
       const canMerge = Boolean(findBestStashMerge());
       ui.mobileStashMerge.disabled =
-        !game.started || game.timeLeft <= 0 || !canMerge || !ui.guideOverlay.hidden || !ui.modal.hidden;
+        !shouldShowStashUi() || !game.started || game.timeLeft <= 0 || !canMerge || !ui.guideOverlay.hidden || !ui.modal.hidden;
     }
   }
 
@@ -4832,30 +4970,34 @@
 
   function getOrderHintText() {
     if (!game.started) {
-      return "지금 할 일: 밥을 쏴서 위쪽 같은 칸에 넣으세요.";
+      return "밥 칸에 넣으세요.";
+    }
+
+    if (game.deliveryReadyAmmo) {
+      return "배송 준비를 탭하세요.";
     }
 
     const pickupPiece = game.pieces.find((piece) => piece.pickupReady && isAmmoUsefulForCurrentOrder(piece.type, piece.level));
     if (pickupPiece) {
       if (shouldAutoPickupPiece(pickupPiece)) {
-        return `지금 할 일: 기다리거나 ${getFoodName(pickupPiece.type, pickupPiece.level)}을 탭해 빨리 보관하세요.`;
+        return `${getFoodShortLabel(pickupPiece.type, pickupPiece.level)}을 탭하면 빨라요.`;
       }
-      return `지금 할 일: 바닥의 ${getFoodName(pickupPiece.type, pickupPiece.level)}를 탭해 보관하세요.`;
+      return "깜빡이는 재료를 탭하세요.";
     }
 
     const usefulAmmo = game.ammoStash.find((ammo) => ammo && isAmmoUsefulForCurrentOrder(ammo.type, ammo.level));
     if (usefulAmmo) {
-      return `지금 할 일: 보관함의 ${getFoodName(usefulAmmo.type, usefulAmmo.level)} 배송! 칸을 탭하세요.`;
+      return "노란 배송! 칸을 탭하세요.";
     }
 
     const stashMerge = findBestStashMerge();
     if (stashMerge?.useful) {
-      return `지금 할 일: 보관함 합치기로 ${getFoodName(stashMerge.type, stashMerge.nextLevel)}을 만드세요.`;
+      return "보관함 합치기를 누르세요.";
     }
 
     const currentAmmo = getCurrentCannonAmmo();
     if (currentAmmo && isAmmoUsefulForCurrentOrder(currentAmmo.type, currentAmmo.level)) {
-      return `지금 할 일: ${getFoodName(currentAmmo.type, currentAmmo.level)}을 위 ${FOODS[currentAmmo.type].name} 칸에 배달하세요.`;
+      return `${FOODS[currentAmmo.type].name} 칸에 넣으세요.`;
     }
 
     const id = Object.keys(game.order || {}).find((key) => {
@@ -4865,9 +5007,9 @@
 
     const { type, level } = parseOrderKey(id);
     if (level <= 0) {
-      return `지금 할 일: ${FOODS[type].name}을 쏴서 위 ${FOODS[type].name} 칸에 넣으세요.`;
+      return `${FOODS[type].name} 칸에 넣으세요.`;
     }
-    return `지금 할 일: ${getMergeActionHint(type, level)}.`;
+    return getMergeActionHint(type, level);
   }
 
   function updateTutorialAssist(dt) {
@@ -5296,8 +5438,32 @@
 
   function drawAmmoStash() {
     const rects = getAmmoSlotRects();
+    const deliveryRect = getDeliveryReadyRect();
     const mergeButton = getStashMergeButtonRect();
     const canMergeStash = Boolean(findBestStashMerge());
+
+    if (game.deliveryReadyAmmo) {
+      const ammo = game.deliveryReadyAmmo;
+      const pulse = 0.5 + Math.sin(performance.now() / 120) * 0.22;
+      ctx.save();
+      ctx.fillStyle = "#fff1b6";
+      ctx.strokeStyle = "#f1c453";
+      ctx.lineWidth = 4 + pulse * 2;
+      ctx.shadowColor = "rgba(241, 196, 83, 0.42)";
+      ctx.shadowBlur = 12 + pulse * 12;
+      roundRect(deliveryRect.x, deliveryRect.y, deliveryRect.width, deliveryRect.height, 13);
+      ctx.fill();
+      ctx.stroke();
+      ctx.shadowColor = "transparent";
+      ctx.fillStyle = "#18312b";
+      ctx.font = "950 13px system-ui, sans-serif";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(`${getFoodShortLabel(ammo.type, ammo.level)} 배송 준비`, deliveryRect.x + deliveryRect.width / 2, deliveryRect.y + deliveryRect.height / 2);
+      ctx.restore();
+    }
+
+    if (!shouldShowStashUi()) return;
 
     ctx.save();
     ctx.fillStyle = "#18312b";

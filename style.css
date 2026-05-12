@@ -520,6 +520,7 @@ h1 {
 }
 
 .ammo-status > div,
+.mobile-delivery-button,
 .mobile-stash-buttons button,
 .mobile-merge-button {
   min-width: 0;
@@ -552,10 +553,31 @@ h1 {
   white-space: nowrap;
 }
 
+.mobile-delivery-button {
+  min-height: 48px;
+  color: var(--leaf-dark);
+  background: #fff1b6;
+  border-color: rgba(241, 196, 83, 0.88);
+  box-shadow: 0 0 0 3px rgba(241, 196, 83, 0.2);
+  font-size: 0.86rem;
+  font-weight: 950;
+  animation: stashPulse 680ms ease-in-out infinite alternate;
+}
+
+.mobile-delivery-button[hidden] {
+  display: none;
+}
+
 .mobile-stash-buttons {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 7px;
+}
+
+.mobile-ammo-dock.is-stash-hidden .stash-title,
+.mobile-ammo-dock.is-stash-hidden .mobile-stash-buttons,
+.mobile-ammo-dock.is-stash-hidden .mobile-merge-button {
+  display: none;
 }
 
 .mobile-stash-buttons button {
@@ -1705,6 +1727,11 @@ body.is-debug .action-panel .balance-button {
   .stash-title {
     font-size: 0.62rem;
     line-height: 1;
+  }
+
+  .mobile-delivery-button {
+    min-height: 38px;
+    font-size: 0.72rem;
   }
 
   .mobile-stash-buttons {
