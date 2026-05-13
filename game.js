@@ -225,115 +225,123 @@
   const TUTORIAL_COACH_STEPS = [
     {
       id: "intro",
-      text: "안녕! 오늘은 쏘기, 합치기, 배달만 배우자.",
+      text: "연습을 시작합니다. 목표는 현재탄을 키운 뒤, 완성된 재료를 위쪽 같은 색 배달칸에 넣는 것입니다.",
       wait: "next",
       highlight: [],
-      reaction: "쏘기, 합치기, 배달!",
+      reaction: "쏘기, 합치기, 배달",
     },
     {
       id: "directDelivery",
-      text: "밥을 위쪽 밥 칸에 넣어보자. 화면을 꾹 눌렀다가 손을 떼면 발사돼.",
+      text: "먼저 배달을 체험합니다. 화면을 꾹 누르면 힘이 차고, 방향을 맞춘 뒤 손을 떼면 발사됩니다. 밥을 위쪽 밥 칸에 넣으세요.",
       wait: "deliver",
       setup: "directDelivery",
       highlight: ["currentAmmo", "slot:rice"],
-      reaction: "노란 밥 칸을 보고 쏴요",
+      reaction: "밥 칸을 보고 발사",
     },
     {
       id: "mergeRice",
-      text: "같은 재료 두 개가 닿으면 한 단계 커져. 지금은 밥 + 밥 = 주먹밥!",
+      text: "이번에는 합체입니다. 현재탄과 같은 재료, 같은 단계의 중앙 타겟을 맞추면 현재탄이 한 단계 성장합니다. 밥 타겟을 맞추세요.",
       wait: "merge",
       setup: "mergeRice",
       highlight: ["currentAmmo", "tutorialTarget"],
-      reaction: "가운데 밥을 맞춰요",
+      reaction: "중앙 타겟 맞추기",
     },
     {
       id: "readyDelivery",
-      text: "같은 재료를 맞추면 현재탄이 바로 커져. 이제 주먹밥을 다시 쏠 수 있어.",
+      text: "성공했습니다. 맞춘 결과물은 바닥에 남지 않고 현재탄으로 장전됩니다. 이제 현재탄은 주먹밥입니다.",
       wait: "next",
       highlight: ["currentAmmo"],
-      reaction: "현재탄 업그레이드!",
+      reaction: "현재탄 성장",
     },
     {
       id: "deliverRiceball",
-      text: "주먹밥도 밥 종류야. 위쪽 밥 칸에 넣으면 배달 완료!",
+      text: "완성 단계가 되면 중앙 타겟이 사라집니다. 이제 배달 단계입니다. 주먹밥을 위쪽 밥 칸에 넣으세요.",
       wait: "deliver",
       setup: "preparedDelivery",
       highlight: ["currentAmmo", "slot:rice"],
-      reaction: "주먹밥은 밥 칸!",
+      reaction: "완성 후 배달",
     },
     {
       id: "scoreTips",
-      text: "점수를 올리는 기본은 세 가지야. 타겟을 맞춰 합체하면 합체 점수, 완성 재료를 위 칸에 넣으면 배달 점수, 빨리 넣으면 남은 시간 보너스가 붙어.",
+      text: "점수는 세 가지로 오릅니다. 타겟을 맞추면 합체 점수, 완성 재료를 배달하면 배달 점수, 빠르게 배달하면 남은 시간 보너스가 붙습니다.",
       wait: "next",
       highlight: [],
       reaction: "합체 + 배달 + 시간!",
     },
     {
       id: "comboTips",
-      text: "더 높은 점수는 콤보야. 합체와 배달을 실수 없이 이어가면 콤보 보너스가 커져. 다른 칸에 오래 머물면 콤보가 끊길 수 있어.",
+      text: "고득점은 콤보가 중요합니다. 합체와 배달을 실수 없이 이어가면 콤보 보너스가 커집니다. 다른 칸에 오래 머물면 콤보가 끊길 수 있습니다.",
       wait: "next",
       highlight: [],
-      reaction: "실수 없이 이어가기!",
+      reaction: "콤보 유지",
     },
     {
       id: "feverTips",
-      text: "콤보 x8을 만들거나 도시락 3개를 연속 완성하면 피버가 켜져. 피버 중에는 2발씩 나가고 점수 보너스도 노릴 수 있어.",
+      text: "콤보 x8을 만들거나 도시락 3개를 연속 완성하면 피버가 켜집니다. 피버 중에는 2발씩 발사되고 점수 보너스를 노릴 수 있습니다.",
       wait: "next",
       highlight: [],
       reaction: "피버는 고득점 찬스!",
     },
     {
       id: "autoFireUnlockTips",
-      text: "자동발사는 본 게임에서 도시락 2개를 완성하면 열려. 화면 아래 자동발사 버튼이 켜지고, 키보드에서는 E키로도 쓸 수 있어.",
+      text: "자동발사는 본 게임에서 도시락 2개를 완성하면 열립니다. 화면 아래 자동발사 버튼이 켜지고, 키보드에서는 E키로 사용할 수 있습니다.",
       wait: "next",
       highlight: [],
       reaction: "2개 완성 후 자동발사!",
     },
     {
       id: "autoFireUseTips",
-      text: "자동발사를 누르면 손을 떼도 4초 동안 계속 풀파워로 쏴. 성장 중이면 중앙 타겟을 맞추고, 완성 상태면 위 배달칸을 노려.",
+      text: "자동발사를 누르면 4초 동안 풀파워로 계속 발사됩니다. 성장 중이면 중앙 타겟을 맞추고, 완성 상태면 위 배달칸을 노립니다.",
       wait: "next",
       highlight: [],
       reaction: "4초 풀파워 연사!",
     },
     {
+      id: "autoFirePractice",
+      text: "이제 직접 체험합니다. 아래 자동발사 버튼을 누르거나 키보드 E를 누르세요. 자동으로 타겟을 향해 풀파워 발사가 시작됩니다.",
+      wait: "autoFire",
+      setup: "autoFirePractice",
+      highlight: ["currentAmmo", "tutorialTarget"],
+      reaction: "자동발사 버튼 또는 E!",
+    },
+    {
       id: "autoFireCooldownTips",
-      text: "자동발사를 쓰고 나면 버튼에 남은 초가 표시돼. 쿨타임이 끝나면 다시 자동발사를 눌러 중요한 주문을 빠르게 처리하면 돼.",
+      text: "자동발사를 사용하면 버튼에 남은 초가 표시됩니다. 쿨타임이 끝난 뒤 다시 눌러 중요한 주문을 빠르게 처리하세요.",
       wait: "next",
       highlight: [],
       reaction: "쿨타임 확인!",
     },
     {
       id: "boosterUnlockTips",
-      text: "화살표 부스터도 본 게임에서 도시락 2개를 완성한 뒤부터 나타나. 화면 안에 잠깐 생겼다가 사라지는 방향 표시야.",
+      text: "화살표 부스터도 본 게임에서 도시락 2개를 완성한 뒤부터 나타납니다. 화면 안에 잠깐 생겼다가 사라지는 방향 표시입니다.",
       wait: "next",
       highlight: [],
       reaction: "2개 완성 후 화살표!",
     },
     {
       id: "boosterHitTips",
-      text: "재료가 화살표에 닿으면 화살표가 가리키는 방향으로 튕겨 나가. 위쪽 화살표는 배달칸 쪽으로, 옆/대각선 화살표는 경로를 바꿔줘.",
+      text: "재료가 화살표에 닿으면 화살표가 가리키는 방향으로 튕겨 나갑니다. 위쪽 화살표는 배달칸 쪽으로, 옆이나 대각선 화살표는 경로를 바꿉니다.",
       wait: "next",
       highlight: [],
       reaction: "닿으면 방향 전환!",
     },
     {
       id: "boosterScoreTips",
-      text: "화살표를 잘 쓰면 빠른 배달이나 벽 튕김 보너스를 만들 수 있어. 하지만 엉뚱한 방향으로 튀면 시간이 늦어지니 각도를 보고 쏴.",
+      text: "화살표를 잘 활용하면 빠른 배달이나 벽 튕김 보너스를 만들 수 있습니다. 엉뚱한 방향으로 튀면 시간이 늦어지므로 각도를 보고 발사하세요.",
       wait: "next",
       highlight: [],
       reaction: "화살표는 기회와 위험!",
     },
     {
       id: "difficultyTips",
-      text: "본 게임은 연습처럼 순서가 고정되지 않아. 주문 재료, 필요한 단계, 중앙 타겟 위치가 매번 섞이고 완성 수가 늘면 높은 단계 주문이 더 자주 나와.",
+      text: "본 게임은 연습처럼 순서가 고정되지 않습니다. 주문 재료, 필요한 단계, 중앙 타겟 위치가 매번 섞이고 완성 수가 늘면 높은 단계 주문이 더 자주 나옵니다.",
       wait: "next",
       highlight: [],
       reaction: "난이도는 점점 상승!",
     },
     {
       id: "outro",
-      text: "정리하면, 타겟을 맞춰 현재탄을 키우고 완성되면 위 칸에 배달해. 빠른 배달, 콤보, 피버, 자동발사, 화살표 활용이 고득점 핵심이야.",
+      text: "정리합니다. 타겟을 맞춰 현재탄을 키우고, 완성되면 위 칸에 배달하세요. 빠른 배달, 콤보, 피버, 자동발사, 화살표 활용이 고득점 핵심입니다.",
       wait: "finish",
       highlight: [],
       reaction: "연습 끝!",
@@ -1170,6 +1178,7 @@
     canvas.addEventListener("pointermove", handleCannonPointerMove);
     canvas.addEventListener("pointerup", handleCannonPointerUp);
     canvas.addEventListener("pointercancel", cancelCannonAim);
+    window.addEventListener("pointerdown", handleTutorialScreenAdvance, { capture: true });
 
     ui.restart.addEventListener("click", () => startGame({ skipTutorial: true }));
     ui.modeButton.addEventListener("click", toggleMode);
@@ -1505,7 +1514,15 @@
   }
 
   function useSkill() {
-    if (!game.running || game.skillCooldown > 0 || game.tutorialActive || !shouldUnlockSkill()) return;
+    const tutorialAutoFire = game.tutorialActive && isTutorialActionAllowed("autoFire");
+    if (
+      !game.running ||
+      game.skillCooldown > 0 ||
+      (game.tutorialActive && !tutorialAutoFire) ||
+      (!game.tutorialActive && !shouldUnlockSkill())
+    ) {
+      return;
+    }
 
     unlockAudio();
     game.autoFireTimer = AUTO_FIRE_SECONDS;
@@ -1516,6 +1533,11 @@
     game.itemMessageTimer = 1.4;
     showFloatingText("자동발사 ON!", CENTER.x, CENTER.y - 78, "#f1c453", 34);
     setCharacterReaction("자동발사!", "skill", 1.3);
+    if (tutorialAutoFire) {
+      window.setTimeout(() => {
+        completeTutorialAction("autoFire");
+      }, 1400);
+    }
     updateUi(false);
   }
 
@@ -5485,13 +5507,13 @@
     if (ui.orderHint) {
       ui.orderHint.textContent = getOrderHintText();
     }
-    ui.skill.hidden = !shouldUnlockSkill();
+    ui.skill.hidden = !(shouldUnlockSkill() || (game.tutorialActive && isTutorialActionAllowed("autoFire")));
     ui.skill.disabled =
       game.skillCooldown > 0 ||
       !game.started ||
       !game.running ||
-      game.tutorialActive ||
-      !shouldUnlockSkill() ||
+      (game.tutorialActive && !isTutorialActionAllowed("autoFire")) ||
+      (!game.tutorialActive && !shouldUnlockSkill()) ||
       !canUseCannon();
     updateModeAndRuleUi();
     updateMetaUi();
@@ -5860,8 +5882,9 @@
     if (!step) return "연습을 준비하세요";
     if (step.wait === "deliver") return step.id === "directDelivery" ? "밥 칸에 넣으세요" : "밥 칸에 배달하세요";
     if (step.wait === "merge") return "가운데 밥을 맞추세요";
+    if (step.wait === "autoFire") return "자동발사 버튼 또는 E를 누르세요";
     if (step.wait === "finish") return "연습 끝";
-    return "화살표를 눌러 다음으로";
+    return "아무 곳이나 눌러 다음으로";
   }
 
   function startTutorialCoach() {
@@ -5916,6 +5939,13 @@
       loadPreparedAmmo(ammo, "주먹밥 완성!");
       setNextCannonAmmo(createAmmo("rice", 0, false));
       return;
+    }
+
+    if (step.setup === "autoFirePractice") {
+      setupTutorialOrder("rice", 1);
+      setCannonAmmo(createAmmo("rice", 0, false));
+      setNextCannonAmmo(createAmmo("rice", 0, false));
+      spawnTutorialMergeTarget();
     }
   }
 
@@ -6002,6 +6032,23 @@
     }
     if (game.tutorialActionReady) return;
 
+    proceedTutorialCoach();
+  }
+
+  function handleTutorialScreenAdvance(event) {
+    if (!game.tutorialActive || !game.started || !ui.guideOverlay.hidden || !ui.modal.hidden) return;
+    if (game.tutorialActionReady) return;
+    if (isBlockingOverlayOpen()) return;
+
+    const target = event.target;
+    if (target?.closest?.("button, a, input, select, textarea")) return;
+
+    event.preventDefault();
+    event.stopPropagation();
+    if (!game.tutorialTextDone) {
+      finishTutorialTyping();
+      return;
+    }
     proceedTutorialCoach();
   }
 
