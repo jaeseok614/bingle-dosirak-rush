@@ -147,7 +147,7 @@
   const LEADERBOARD_KEY = "bingle-dosirak-rush-leaderboard";
   const DAILY_LEADERBOARD_KEY = "bingle-dosirak-rush-daily";
   const META_KEY = "bingle-dosirak-rush-meta";
-  const FEVER_SECONDS = 8;
+  const FEVER_SECONDS = 4.2;
   const FEVER_COMBO = 8;
   const FEVER_ORDER_STREAK = 3;
   const SKILL_COOLDOWN = 8;
@@ -314,7 +314,7 @@
     },
     {
       id: "feverPractice",
-      text: "피버 체험입니다. 피버가 켜지면 몇 초 동안 자동으로 발사하고 목표도 자동 조준합니다. 합체 전이면 타겟, 완성되면 배달칸을 우선합니다.",
+      text: "피버 체험입니다. 피버가 켜지면 몇 초 동안 현재 조준 방향으로 풀파워 자동발사합니다. 방향은 직접 맞춰보세요.",
       wait: "deliver",
       setup: "feverPractice",
       highlight: ["currentAmmo", "slot:rice"],
@@ -322,7 +322,7 @@
     },
     {
       id: "feverTips",
-      text: "본 게임에서는 콤보 x8을 만들거나 도시락 3개를 연속 완성하면 피버가 켜집니다. 피버 중에는 자동발사와 자동 조준이 같이 작동합니다.",
+      text: "본 게임에서는 콤보 x8을 만들거나 도시락 3개를 연속 완성하면 피버가 켜집니다. 피버 중에는 현재 조준 방향으로 풀파워 자동발사합니다.",
       wait: "next",
       highlight: [],
       reaction: "피버는 자동발사 찬스",
@@ -1554,14 +1554,10 @@
   function autoFireCannon() {
     if (!canUseCannon()) return false;
 
-    const aim = getAutoFireAimPoint();
-    if (!aim) return false;
-
-    setCannonAim(Math.atan2(aim.y - CANNON.y, aim.x - CANNON.x), aim.power);
     fireCannonFromCurrentAim({
       allowTutorialAimAssist: false,
+      lockedPower: CANNON.maxPower,
       lockedAngle: game.cannon.angle,
-      lockedPower: game.cannon.power,
     });
     return true;
   }
@@ -1859,16 +1855,8 @@
     const type = game.cannon.loadedType || pickCannonType();
     const level = game.cannon.loadedLevel || 0;
     const fromStash = game.cannon.loadedFromStashAt > 0;
-    const feverAimTarget =
-      game.feverTimer > 0 && !Number.isFinite(options.lockedAngle) ? getAutoFireAimPoint() : null;
-    if (feverAimTarget) {
-      setCannonAim(
-        Math.atan2(feverAimTarget.y - CANNON.y, feverAimTarget.x - CANNON.x),
-        Math.max(game.cannon.power, feverAimTarget.power),
-      );
-    }
     const openingAimTarget =
-      !feverAimTarget && game.tutorialActive && allowTutorialAimAssist ? getOpeningAimTarget(type, level) : null;
+      game.tutorialActive && allowTutorialAimAssist ? getOpeningAimTarget(type, level) : null;
     if (openingAimTarget) {
       setCannonAim(
         Math.atan2(openingAimTarget.y - CANNON.y, openingAimTarget.x - CANNON.x),
@@ -5998,7 +5986,7 @@
       setupTutorialOrder("rice", 0);
       setCannonAmmo(createAmmo("rice", 0, false));
       setNextCannonAmmo(createAmmo("rice", 0, false));
-      activateFever("피버 자동 조준!");
+      activateFever("피버 풀파워 자동발사!");
       return;
     }
 
@@ -6230,8 +6218,8 @@
     ctx.strokeText("피버 주방!", WIDTH / 2, 18);
     ctx.fillText("피버 주방!", WIDTH / 2, 18);
     ctx.font = "950 24px system-ui, sans-serif";
-    ctx.strokeText("자동 조준", WIDTH / 2, 68);
-    ctx.fillText("자동 조준", WIDTH / 2, 68);
+    ctx.strokeText("풀파워 연사", WIDTH / 2, 68);
+    ctx.fillText("풀파워 연사", WIDTH / 2, 68);
     ctx.restore();
   }
 
