@@ -199,6 +199,7 @@
   const MERGE_TARGET_VISIBLE_MS = 1650;
   const MERGE_TARGET_RESPAWN_MS = 620;
   const MISSED_SHOT_CLEANUP_MS = 2400;
+  const AUTO_FIRE_SECONDS = 4.2;
   const AMMO_STASH_SIZE = 4;
   let PICKUP_ZONE_TOP = ARENA.bottom - 86;
   const PICKUP_SETTLE_SECONDS = 0.52;
@@ -1337,6 +1338,7 @@
     game.shotStreak = 0;
     game.orderStreak = 0;
     game.skillCooldown = 0;
+    game.autoFireTimer = 0;
     game.characterMessage = shouldRun ? "꾹 눌러 힘 조절" : "준비 완료";
     game.characterMood = shouldRun ? "happy" : "idle";
     game.characterReactionTimer = shouldRun ? 1.6 : 0;
@@ -1346,6 +1348,7 @@
     game.ammoHintShown = false;
     game.skillUnlockShown = false;
     game.mergeTargetRespawnAt = 0;
+    game.mergeTargetHintAt = 0;
     game.tutorialRun = tutorialRun;
     game.tutorialActive = shouldRun && (forceTutorial || (!skipTutorial && !isTutorialComplete()));
     game.tutorialStep = 0;
@@ -1442,12 +1445,14 @@
     if (!game.running || game.skillCooldown > 0 || game.tutorialActive || !shouldUnlockSkill()) return;
 
     unlockAudio();
-    if (!autoFireCannon()) return;
+    game.autoFireTimer = AUTO_FIRE_SECONDS;
+    autoFireCannon();
 
-    game.skillCooldown = Math.max(0.45, SKILL_COOLDOWN * 0.28 * getCharacterStats().skillCooldown);
-    game.itemMessage = "자동발사!";
-    game.itemMessageTimer = 1.1;
-    setCharacterReaction("자동발사!", "skill", 1.1);
+    game.skillCooldown = Math.max(AUTO_FIRE_SECONDS + 1.2, SKILL_COOLDOWN * getCharacterStats().skillCooldown);
+    game.itemMessage = "자동발사 ON!";
+    game.itemMessageTimer = 1.4;
+    showFloatingText("자동발사 ON!", CENTER.x, CENTER.y - 78, "#f1c453", 34);
+    setCharacterReaction("자동발사!", "skill", 1.3);
     updateUi(false);
   }
 
@@ -1486,14 +1491,14 @@
       return {
         x: target.body.position.x,
         y: target.body.position.y,
-        power: 0.9,
+        power: 1,
       };
     }
 
     return {
       x: CENTER.x,
       y: CENTER.y,
-      power: 0.82,
+      power: 1,
     };
   }
 
@@ -2245,6 +2250,7 @@
 
   function getIntroStep() {
     if (game.tutorialActive && game.completed === 0) return "tutorialDirect";
+    if (!game.tutorialActive) return "normal";
     if (game.completed === 0) return "direct";
     if (game.completed === 1) return "mergeAutoLoad";
     if (game.completed === 2) return "deliveryTap";
@@ -2259,7 +2265,7 @@
   }
 
   function isOpeningOrder() {
-    return game.tutorialActive || game.completed < OPENING_ORDER_COUNT;
+    return game.tutorialActive;
   }
 
   function shouldShowStashUi() {
@@ -2271,11 +2277,11 @@
   }
 
   function shouldAllowActionExtras() {
-    return !game.tutorialActive && game.completed >= OPENING_ORDER_COUNT;
+    return !game.tutorialActive && game.completed >= 2;
   }
 
   function shouldUnlockSkill() {
-    return !game.tutorialActive && game.completed >= 4;
+    return !game.tutorialActive && game.completed >= 2;
   }
 
   function getIntroOrderSpec() {
@@ -2299,9 +2305,10 @@
     if (phase !== game.lastRushPhase) {
       game.lastRushPhase = phase;
       const config = getRushConfig();
+      const extra = phase >= 2 ? "높은 단계 주문이 더 자주 나옵니다" : "타겟 위치와 주문 단계가 섞입니다";
       game.itemMessage = config.name;
-      game.itemMessageTimer = 1.6;
-      showFloatingText(config.name, CENTER.x, CENTER.y - 72, phase >= 2 ? "#e85d4f" : "#2f6d5b", 34);
+      game.itemMessageTimer = 2.2;
+      showFloatingText(`${config.name}: ${extra}`, CENTER.x, CENTER.y - 72, phase >= 2 ? "#e85d4f" : "#2f6d5b", 30);
       burst(CENTER.x, CENTER.y - 20, phase >= 2 ? "#e85d4f" : "#f1c453", 20 + phase * 8);
     }
 
@@ -2380,24 +2387,31 @@
       setNextCannonAmmo(createSmartAmmo());
     }
     syncBoardForCurrentAmmo();
-    if (game.started && getIntroStep() === "skillUnlock" && !game.skillUnlockShown) {
+    if (game.started && shouldUnlockSkill() && !game.skillUnlockShown) {
       game.skillUnlockShown = true;
       game.itemMessage = "자동발사 해금!";
       game.itemMessageTimer = 1.8;
-      showFloatingText("자동발사 해금!", CENTER.x, CANNON.y - 118, "#f1c453", 32);
+      showFloatingText("자동발사 가능: 버튼/E를 누르면 4초 풀파워 연사", CENTER.x, CENTER.y - 86, "#f1c453", 30);
       setCharacterReaction("자동발사를 쓸 수 있어요", "happy", 1.6);
     }
     updateUi(true);
   }
 
   function pickOrderLevel() {
-    if (game.completed < 2) return 0;
-
     const phase = getRushPhase();
     const tunedDifficulty = meta.balance.orderDifficulty;
-    const maxLevel = clamp(phase + Math.floor((game.completed * tunedDifficulty) / 8), 1, MAX_FOOD_LEVEL);
-    const minLevel = phase >= 2 ? 2 : 1;
-    return Math.floor(randomRange(minLevel, maxLevel + 1, game.orderRng));
+    if (game.completed < 2) {
+      return game.orderRng() < 0.55 ? 0 : 1;
+    }
+
+    const progressLevel = Math.floor((game.completed * tunedDifficulty) / 5);
+    const maxLevel = clamp(1 + phase + progressLevel, 1, MAX_FOOD_LEVEL);
+    const minLevel = phase >= 2 && game.completed >= 8 ? 1 : 0;
+    const roll = game.orderRng();
+    if (maxLevel >= 3 && roll > 0.72) return 3;
+    if (maxLevel >= 2 && roll > 0.42) return 2;
+    if (maxLevel >= 1 && roll > 0.16) return 1;
+    return minLevel;
   }
 
   function orderHasType(order, type) {
@@ -2657,8 +2671,14 @@
     if (!target || current.level >= target.level) return;
 
     const slot = SLOTS.find((candidate) => candidate.type === current.type);
-    const targetX = slot ? CANNON.x + (getSlotCenterX(slot) - CANNON.x) * 0.55 : CENTER.x;
-    const targetY = CANNON.y + ((slot ? ARENA.slotBottom + 20 : CENTER.y) - CANNON.y) * 0.5;
+    const difficultySpread = 34 + getRushPhase() * 28 + Math.min(42, game.completed * 3);
+    const laneBias = slot ? (getSlotCenterX(slot) - CANNON.x) * randomRange(0.36, 0.7, game.orderRng) : 0;
+    const targetX = CANNON.x + laneBias + randomRange(-difficultySpread, difficultySpread, game.orderRng);
+    const targetY =
+      CANNON.y +
+      ((slot ? ARENA.slotBottom + 20 : CENTER.y) - CANNON.y) *
+        randomRange(0.42, 0.62, game.orderRng) +
+      randomRange(-28, 34, game.orderRng);
 
     const piece = spawnIngredient(
       current.type,
@@ -2680,6 +2700,21 @@
     Body.setStatic(piece.body, true);
     Body.setVelocity(piece.body, { x: 0, y: 0 });
     Body.setAngularVelocity(piece.body, 0);
+    showMergeTargetHint(piece);
+  }
+
+  function showMergeTargetHint(piece) {
+    const now = performance.now();
+    if (game.mergeTargetHintAt && now - game.mergeTargetHintAt < 7500) return;
+
+    game.mergeTargetHintAt = now;
+    showFloatingText(
+      `${getFoodName(piece.type, piece.level)} 타겟: 맞추면 현재탄 성장`,
+      piece.body.position.x,
+      piece.body.position.y - 52,
+      "#2c9aa0",
+      24,
+    );
   }
 
   function spawnIngredient(type, index = 0, total = 1, level = 0, position = null, velocity = null) {
@@ -3509,6 +3544,10 @@
 
   function updateSkill(dt) {
     game.skillCooldown = Math.max(0, game.skillCooldown - dt);
+    game.autoFireTimer = Math.max(0, game.autoFireTimer - dt);
+    if (game.autoFireTimer > 0 && canUseCannon()) {
+      autoFireCannon();
+    }
   }
 
   function containEscapedPieces() {
@@ -5623,6 +5662,9 @@
   }
 
   function getSkillButtonText() {
+    if (game.autoFireTimer > 0) {
+      return `연사 ${Math.ceil(game.autoFireTimer)}초`;
+    }
     if (game.skillCooldown > 0) {
       return `자동 ${Math.ceil(game.skillCooldown)}초`;
     }
@@ -5630,6 +5672,9 @@
   }
 
   function getPortraitSkillButtonText() {
+    if (game.autoFireTimer > 0) {
+      return `${Math.ceil(game.autoFireTimer)}초`;
+    }
     if (game.skillCooldown > 0) {
       return `${Math.ceil(game.skillCooldown)}초`;
     }
