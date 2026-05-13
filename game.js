@@ -2067,6 +2067,25 @@
     return OPENING_ORDER_SPECS[getIntroStep()] || null;
   }
 
+  function getRunOpeningOrderSpec() {
+    if (game.tutorialActive) return null;
+    if (game.completed === 0) return { type: "rice", level: 0 };
+    if (game.completed === 1) return { type: "rice", level: 1 };
+    return null;
+  }
+
+  function getMergeTargetVisibleMs() {
+    if (game.completed < 3) return 2600;
+    if (game.completed < 7) return 2100;
+    return MERGE_TARGET_VISIBLE_MS;
+  }
+
+  function getMergeTargetRespawnMs() {
+    if (game.completed < 3) return 420;
+    if (game.completed < 7) return 560;
+    return MERGE_TARGET_RESPAWN_MS;
+  }
+
   function getOrderCountForPhase(phase) {
     if (phase <= 0) return 1;
     if (phase === 1) return game.completed >= 8 ? 2 : 1;
@@ -2115,7 +2134,7 @@
     game.orderHadForbiddenHit = false;
     game.forbiddenType = "";
     game.orderRule = pickOrderRule();
-    const introOrder = getIntroOrderSpec();
+    const introOrder = getIntroOrderSpec() || getRunOpeningOrderSpec();
     const foodPool = game.orderRule.foods || FOOD_KEYS;
 
     if (introOrder) {
@@ -2311,7 +2330,7 @@
 
   function pickCannonType() {
     const neededTypes = getNeededOrderTypes();
-    if (neededTypes.length && game.orderRng() < getRushConfig().smartChance) {
+    if (neededTypes.length) {
       return neededTypes[Math.floor(game.orderRng() * neededTypes.length)];
     }
 
@@ -2527,7 +2546,7 @@
       },
     );
     piece.mergeTarget = true;
-    piece.mergeTargetExpiresAt = performance.now() + MERGE_TARGET_VISIBLE_MS;
+    piece.mergeTargetExpiresAt = performance.now() + getMergeTargetVisibleMs();
     piece.bump = 0.34;
     Body.setStatic(piece.body, true);
     Body.setVelocity(piece.body, { x: 0, y: 0 });
@@ -3510,7 +3529,7 @@
       target.bump = Math.max(target.bump, 0.12);
       if (performance.now() >= target.mergeTargetExpiresAt) {
         clearMergeTargets();
-        game.mergeTargetRespawnAt = performance.now() + MERGE_TARGET_RESPAWN_MS;
+        game.mergeTargetRespawnAt = performance.now() + getMergeTargetRespawnMs();
       }
       return;
     }
