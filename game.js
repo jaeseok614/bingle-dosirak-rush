@@ -2875,15 +2875,6 @@
       updateUi(true);
       return;
     }
-    if (captureMergedOrderAmmo(merged, position)) {
-      burst(position.x, position.y, FOODS[type].color, 22 + nextLevel * 4);
-      setCharacterReaction("합치면 바로 써요!", "happy", 1.2);
-      playSound(game.combo >= 5 && game.combo % 5 === 0 ? "combo" : "success");
-      vibrate([8, 14, 8]);
-      checkFeverTriggers();
-      updateUi(true);
-      return;
-    }
     burst(position.x, position.y, FOODS[type].color, 22 + nextLevel * 4);
     setCharacterReaction("합체!", "happy", 1.15);
     playSound(game.combo >= 5 && game.combo % 5 === 0 ? "combo" : "success");
@@ -2902,19 +2893,6 @@
     game.itemMessage = `${getFoodName(ammo.type, ammo.level)} 완성`;
     game.itemMessageTimer = 1.4;
     completeTutorialAction("merge");
-    return true;
-  }
-
-  function captureMergedOrderAmmo(merged, position) {
-    if (!merged || game.tutorialActive) return false;
-    if (!isAmmoUsefulForCurrentOrder(merged.type, merged.level)) return false;
-
-    const ammo = createAmmo(merged.type, merged.level, true);
-    World.remove(game.world, merged.body);
-    game.pieces = game.pieces.filter((piece) => piece !== merged);
-    routePriorityAmmo(ammo);
-    showFloatingText("합치면 바로 배송 준비!", CANNON.x, CANNON.y - 142, FOODS[ammo.type].color, 24);
-    burst(position.x, position.y - 10, "#f1c453", 10);
     return true;
   }
 
@@ -3521,10 +3499,7 @@
   }
 
   function shouldAutoPickupPiece(piece) {
-    return (
-      !game.tutorialActive &&
-      isAmmoUsefulForCurrentOrder(piece.type, piece.level)
-    );
+    return false;
   }
 
   function shouldRescueImportantPickup(piece) {
