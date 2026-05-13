@@ -1776,7 +1776,6 @@
     if (!game.cannon.aiming || game.cannon.pointerId !== event.pointerId) return;
 
     event.preventDefault();
-    updateCannonAim(getCanvasPoint(event));
     try {
       canvas.releasePointerCapture?.(event.pointerId);
     } catch {
