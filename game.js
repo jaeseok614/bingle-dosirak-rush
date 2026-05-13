@@ -70,6 +70,7 @@
     characterBubble: document.querySelector("#characterBubble"),
     tutorialCoach: document.querySelector("#tutorialCoach"),
     tutorialCoachAvatar: document.querySelector("#tutorialCoachAvatar"),
+    tutorialCoachAvatarImage: document.querySelector("#tutorialCoachAvatarImage"),
     tutorialCoachText: document.querySelector("#tutorialCoachText"),
     tutorialCoachNext: document.querySelector("#tutorialCoachNext"),
     characterSelectOverlay: document.querySelector("#characterSelectOverlay"),
@@ -223,7 +224,7 @@
   const TUTORIAL_COACH_STEPS = [
     {
       id: "intro",
-      text: "연습을 시작합니다. 목표는 현재탄을 키운 뒤, 완성된 재료를 위쪽 같은 색 배달칸에 넣는 것입니다.",
+      text: "연습을 시작합니다. 지금 재료를 키운 뒤, 완성되면 위쪽 같은 재료 칸에 넣으면 됩니다.",
       wait: "next",
       highlight: [],
       reaction: "쏘기, 합치기, 배달",
@@ -238,134 +239,37 @@
     },
     {
       id: "mergeRice",
-      text: "이번에는 합체입니다. 현재탄과 같은 재료, 같은 단계의 중앙 타겟을 맞추면 현재탄이 한 단계 성장합니다. 밥 타겟을 맞추세요.",
+      text: "이번에는 키우기입니다. 지금 재료와 같은 중앙 밥을 맞추면 한 단계 커집니다. 중앙 밥을 맞추세요.",
       wait: "merge",
       setup: "mergeRice",
       highlight: ["currentAmmo", "tutorialTarget"],
-      reaction: "중앙 타겟 맞추기",
+      reaction: "중앙 재료 맞추기",
     },
     {
       id: "readyDelivery",
-      text: "성공했습니다. 맞춘 결과물은 바닥에 남지 않고 현재탄으로 장전됩니다. 이제 현재탄은 주먹밥입니다.",
+      text: "성공했습니다. 맞춘 결과물은 바닥에 남지 않고 지금 재료가 됩니다. 이제 주먹밥을 쏠 차례입니다.",
       wait: "next",
       highlight: ["currentAmmo"],
-      reaction: "현재탄 성장",
+      reaction: "지금 재료 성장",
     },
     {
       id: "deliverRiceball",
-      text: "완성 단계가 되면 중앙 타겟이 사라집니다. 이제 배달 단계입니다. 주먹밥을 위쪽 밥 칸에 넣으세요.",
+      text: "중앙 재료가 사라지면 완성입니다. 주먹밥을 위쪽 밥 칸에 넣으세요.",
       wait: "deliver",
       setup: "preparedDelivery",
       highlight: ["currentAmmo", "slot:rice"],
       reaction: "완성 후 배달",
     },
     {
-      id: "mergeScorePractice",
-      text: "점수 체험 1: 합체 점수입니다. 중앙의 밥 타겟을 맞추세요. 맞는 순간 점수가 바로 오릅니다.",
-      wait: "merge",
-      setup: "scoreMerge",
-      highlight: ["currentAmmo", "tutorialTarget"],
-      reaction: "합체 점수 직접 올리기",
-    },
-    {
-      id: "mergeScoreResult",
-      text: "방금 오른 점수가 합체 점수입니다. 같은 재료를 더 높은 단계로 키울수록 합체 점수가 더 커집니다.",
-      wait: "next",
-      highlight: ["currentAmmo"],
-      reaction: "합체 점수 확인",
-    },
-    {
-      id: "deliveryScorePractice",
-      text: "점수 체험 2: 배달 점수입니다. 장전된 주먹밥을 위쪽 밥 칸에 넣으세요. 완성품을 넣을 때 점수가 크게 오릅니다.",
-      wait: "deliver",
-      setup: "scoreDelivery",
-      highlight: ["slot:rice"],
-      reaction: "배달 점수 직접 올리기",
-    },
-    {
-      id: "deliveryScoreResult",
-      text: "방금 오른 점수가 배달 점수입니다. 완성 단계가 높을수록 배달 점수가 더 큽니다.",
-      wait: "next",
-      highlight: ["slot:rice"],
-      reaction: "배달 점수 확인",
-    },
-    {
-      id: "timeScorePractice",
-      text: "점수 체험 3: 빠른 주문 보너스입니다. 이번 주문은 10초 안에 넣으면 +500점입니다. 바로 위 밥 칸에 넣으세요.",
-      wait: "deliver",
-      setup: "scoreFastDelivery",
-      highlight: ["slot:rice"],
-      reaction: "+500 빠른 주문",
-    },
-    {
-      id: "comboScorePractice",
-      text: "점수 체험 4: 콤보 보너스입니다. 콤보가 쌓인 상태로 시작합니다. 중앙 밥 타겟을 맞추면 기본 합체 점수에 콤보 점수가 더 붙습니다.",
-      wait: "merge",
-      setup: "scoreComboMerge",
-      highlight: ["currentAmmo", "tutorialTarget"],
-      reaction: "콤보 점수 직접 보기",
-    },
-    {
-      id: "comboTips",
-      text: "고득점은 이렇게 만듭니다. 합체로 키우고, 완성품을 빠르게 배달하고, 그 흐름을 끊지 않아 콤보를 유지하세요.",
+      id: "bonusTips",
+      text: "연속으로 성공하면 콤보가 오르고, 나중에 피버 자동발사가 켜집니다. 화살표는 처음 나오면 짧게 알려줄게요.",
       wait: "next",
       highlight: [],
-      reaction: "콤보 유지",
-    },
-    {
-      id: "feverPractice",
-      text: "피버 체험입니다. 피버가 켜지면 몇 초 동안 현재 조준 방향으로 풀파워 자동발사합니다. 방향은 직접 맞춰보세요.",
-      wait: "deliver",
-      setup: "feverPractice",
-      highlight: ["currentAmmo", "slot:rice"],
-      reaction: "피버 자동발사 체험",
-    },
-    {
-      id: "feverTips",
-      text: "본 게임에서는 콤보 x8을 만들거나 도시락 3개를 연속 완성하면 피버가 켜집니다. 피버 중에는 현재 조준 방향으로 풀파워 자동발사합니다.",
-      wait: "next",
-      highlight: [],
-      reaction: "피버는 자동발사 찬스",
-    },
-    {
-      id: "boosterPractice",
-      text: "화살표 체험입니다. 중앙 화살표에 밥을 맞추세요. 재료가 화살표 방향으로 튕겨 나가는 것을 확인하면 됩니다.",
-      wait: "booster",
-      setup: "boosterPractice",
-      highlight: ["currentAmmo"],
-      reaction: "화살표 맞추기",
-    },
-    {
-      id: "boosterUnlockTips",
-      text: "본 게임에서는 도시락 2개를 완성한 뒤부터 화살표가 잠깐씩 나타납니다. 닿은 재료를 화살표 방향으로 튕깁니다.",
-      wait: "next",
-      highlight: [],
-      reaction: "2개 완성 후 화살표",
-    },
-    {
-      id: "boosterHitTips",
-      text: "재료가 화살표에 닿으면 화살표가 가리키는 방향으로 튕겨 나갑니다. 위쪽 화살표는 배달칸 쪽으로, 옆이나 대각선 화살표는 경로를 바꿉니다.",
-      wait: "next",
-      highlight: [],
-      reaction: "닿으면 방향 전환!",
-    },
-    {
-      id: "boosterScoreTips",
-      text: "화살표를 잘 활용하면 빠른 배달이나 벽 튕김 보너스를 만들 수 있습니다. 엉뚱한 방향으로 튀면 시간이 늦어지므로 각도를 보고 발사하세요.",
-      wait: "next",
-      highlight: [],
-      reaction: "화살표는 기회와 위험!",
-    },
-    {
-      id: "difficultyTips",
-      text: "본 게임은 연습처럼 순서가 고정되지 않습니다. 주문 재료, 필요한 단계, 중앙 타겟 위치가 매번 섞이고 완성 수가 늘면 높은 단계 주문이 더 자주 나옵니다.",
-      wait: "next",
-      highlight: [],
-      reaction: "난이도는 점점 상승!",
+      reaction: "콤보와 피버",
     },
     {
       id: "outro",
-      text: "정리합니다. 타겟을 맞춰 현재탄을 키우고, 완성되면 위 칸에 배달하세요. 빠른 배달, 콤보, 피버 자동발사, 화살표 활용이 고득점 핵심입니다.",
+      text: "준비됐습니다. 중앙 재료를 맞춰 키우고, 완성되면 위쪽 같은 재료 칸에 배달하세요.",
       wait: "finish",
       highlight: [],
       reaction: "연습 끝!",
@@ -2158,10 +2062,10 @@
     }
     game.cannon.reloadTimer = Math.min(game.cannon.reloadTimer, 0.08);
     game.cannon.flash = Math.max(game.cannon.flash, 0.16);
-    game.itemMessage = `${getFoodName(selected.type, selected.level)} 장전`;
+    game.itemMessage = `${getFoodName(selected.type, selected.level)} 준비`;
     game.itemMessageTimer = 1.1;
-    showFloatingText("장전!", CANNON.x, CANNON.y - 88, FOODS[selected.type].color, 28);
-    setCharacterReaction("장전!", "happy", 1);
+    showFloatingText("준비!", CANNON.x, CANNON.y - 88, FOODS[selected.type].color, 28);
+    setCharacterReaction("준비!", "happy", 1);
     playSound("item");
     vibrate(8);
     updateUi(false);
@@ -2177,14 +2081,14 @@
     if (!selected) return false;
 
     game.deliveryReadyAmmo = null;
-    loadPreparedAmmo(selected, "배송 준비!");
+    loadPreparedAmmo(selected, "다시 쏘기!");
     if (game.tutorialActive && !options.force) {
       completeTutorialAction("stashTap");
     }
     return true;
   }
 
-  function loadPreparedAmmo(ammo, label = "자동 장전!") {
+  function loadPreparedAmmo(ammo, label = "지금 재료 준비!") {
     const current = getCurrentCannonAmmo();
     if (current && shouldShowStashUi() && (current.type !== ammo.type || current.level !== ammo.level)) {
       game.ammoStash.push(current);
@@ -2419,7 +2323,7 @@
     if (phase !== game.lastRushPhase) {
       game.lastRushPhase = phase;
       const config = getRushConfig();
-      const extra = phase >= 2 ? "높은 단계 주문이 더 자주 나옵니다" : "타겟 위치와 주문 단계가 섞입니다";
+      const extra = phase >= 2 ? "높은 단계 주문이 더 자주 나옵니다" : "중앙 재료 위치와 주문 단계가 섞입니다";
       game.itemMessage = config.name;
       game.itemMessageTimer = 2.2;
       showFloatingText(`${config.name}: ${extra}`, CENTER.x, CENTER.y - 72, phase >= 2 ? "#e85d4f" : "#2f6d5b", 30);
@@ -2595,10 +2499,10 @@
 
   function getMergeActionHint(type, level = 0) {
     const safeLevel = clamp(Math.round(level), 0, MAX_FOOD_LEVEL);
-    if (safeLevel <= 0) return `${FOODS[type].name} 칸에 넣으세요`;
+    if (safeLevel <= 0) return `${FOODS[type].name} 칸에 배달하세요`;
 
     const previous = getFoodName(type, safeLevel - 1);
-    return `${previous}끼리 맞추세요`;
+    return `중앙 ${previous} 맞추기`;
   }
 
   function getFoodLevelConfig(type, level = 0) {
@@ -2821,7 +2725,7 @@
 
     game.mergeTargetHintAt = now;
     showFloatingText(
-      `${getFoodName(piece.type, piece.level)} 타겟: 맞추면 현재탄 성장`,
+      `${getFoodName(piece.type, piece.level)} 맞추면 지금 재료 성장`,
       piece.body.position.x,
       piece.body.position.y - 52,
       "#2c9aa0",
@@ -3144,7 +3048,7 @@
     }
     if (captureMergedOrderAmmo(merged, position)) {
       burst(position.x, position.y, FOODS[type].color, 22 + nextLevel * 4);
-      setCharacterReaction(`${getFoodName(type, nextLevel)} 장전!`, "happy", 1.2);
+      setCharacterReaction(`${getFoodName(type, nextLevel)} 준비!`, "happy", 1.2);
       playSound(game.combo >= 5 && game.combo % 5 === 0 ? "combo" : "success");
       vibrate([8, 14, 8]);
       checkFeverTriggers();
@@ -3845,7 +3749,7 @@
 
     const important = isAmmoUsefulForCurrentOrder(piece.type, piece.level);
     showFloatingText(
-      piece.autoPickupAt > 0 ? "곧 자동 보관!" : important ? "탭해서 보관!" : "탭!",
+      piece.autoPickupAt > 0 ? "곧 정리!" : important ? "다시 쏘기!" : "정리",
       piece.body.position.x,
       piece.body.position.y - 38,
       FOODS[piece.type].color,
@@ -3896,7 +3800,7 @@
         24,
       );
     } else if (source === "auto") {
-      showFloatingText("자동 보관!", CANNON.x, CANNON.y - 116, FOODS[piece.type].color, 24);
+      showFloatingText("정리 완료!", CANNON.x, CANNON.y - 116, FOODS[piece.type].color, 24);
     }
   }
 
@@ -3967,11 +3871,11 @@
 
   function setDeliveryReadyAmmo(ammo) {
     game.deliveryReadyAmmo = ammo;
-    game.itemMessage = `${getFoodName(ammo.type, ammo.level)} 배송 준비`;
+    game.itemMessage = `${getFoodName(ammo.type, ammo.level)} 준비`;
     game.itemMessageTimer = 1.4;
-    showFloatingText("배송 준비!", CANNON.x, CANNON.y - 112, FOODS[ammo.type].color, 28);
+    showFloatingText("지금 재료 준비!", CANNON.x, CANNON.y - 112, FOODS[ammo.type].color, 28);
     showAmmoTapHint();
-    setCharacterReaction("배송 준비!", "happy", 1.25);
+    setCharacterReaction("다시 쏘기!", "happy", 1.25);
     updateUi(false);
   }
 
@@ -3980,14 +3884,14 @@
 
     game.ammoHintShown = true;
     if (isPortraitLayout()) {
-      showFloatingText("아래 배송 준비 탭!", CANNON.x, CANNON.y - 112, "#f1c453", 26);
-      setCharacterReaction("배송 준비를 눌러 장전", "happy", 1.6);
+      showFloatingText("다시 쏘기!", CANNON.x, CANNON.y - 112, "#f1c453", 26);
+      setCharacterReaction("지금 재료를 쏘세요", "happy", 1.6);
       return;
     }
 
     const rect = getDeliveryReadyRect();
-    showFloatingText("자동 장전 준비", rect.x + rect.width / 2, rect.y - 12, "#f1c453", 26);
-    setCharacterReaction("배송 준비를 눌러 장전", "happy", 1.6);
+    showFloatingText("지금 재료 준비", rect.x + rect.width / 2, rect.y - 12, "#f1c453", 26);
+    setCharacterReaction("지금 재료를 쏘세요", "happy", 1.6);
   }
 
   function canMergeAmmo(a, b) {
@@ -4048,9 +3952,9 @@
 
     const score = 150 + merge.nextLevel * 70;
     addScore(score, "combo");
-    showShotFeedback(`보관합체! +${score}`, x, y, "#2c9aa0");
+    showShotFeedback(`합체! +${score}`, x, y, "#2c9aa0");
     burst(x, rect.y + rect.height + 18, FOODS[merge.type].color, 18);
-    setCharacterReaction("보관합체!", "happy", 1.2);
+    setCharacterReaction("합체!", "happy", 1.2);
     playSound("combo");
     vibrate([8, 14, 8]);
     updateUi(true);
@@ -5606,9 +5510,9 @@
     if (ui.mobileActionHint) {
       ui.mobileActionHint.textContent = `지금: ${getShortActionHint()}`;
     }
-    ui.mobileTimeText.textContent = `${game.timeLeft.toFixed(1)}초`;
-    ui.mobileScoreText.textContent = `${Math.round(game.score).toLocaleString("ko-KR")}점`;
-    ui.mobileComboText.textContent = `x${game.combo}`;
+    if (ui.mobileTimeText) ui.mobileTimeText.textContent = `${game.timeLeft.toFixed(1)}초`;
+    if (ui.mobileScoreText) ui.mobileScoreText.textContent = `${Math.round(game.score).toLocaleString("ko-KR")}점`;
+    if (ui.mobileComboText) ui.mobileComboText.textContent = `x${game.combo}`;
     ui.mobileOrderHud.classList.toggle("is-paused", game.awaitingFirstInput);
   }
 
@@ -5651,7 +5555,7 @@
       const ammo = game.deliveryReadyAmmo;
       ui.mobileDeliveryReady.hidden = !ammo;
       ui.mobileDeliveryReady.disabled = !ammo;
-      ui.mobileDeliveryReady.textContent = ammo ? `${promptDeliveryReady ? "지금 배송" : "배송 준비"} · ${getFoodName(ammo.type, ammo.level)}` : "배송 준비";
+      ui.mobileDeliveryReady.textContent = ammo ? `${promptDeliveryReady ? "지금 배달" : "지금 재료"} · ${getFoodName(ammo.type, ammo.level)}` : "지금 재료";
       ui.mobileDeliveryReady.classList.toggle("is-active-turn", Boolean(ammo && promptDeliveryReady));
       ui.mobileDeliveryReady.classList.toggle("is-tutorial-target", Boolean(ammo && isMobileDeliveryReadyTutorialTarget()));
     }
@@ -5671,7 +5575,7 @@
       button.setAttribute(
         "aria-label",
         ammo
-          ? `${getFoodName(ammo.type, ammo.level)}${useful ? " 배송 가능" : ""} 장전`
+          ? `${getFoodName(ammo.type, ammo.level)}${useful ? " 배달 가능" : ""} 준비`
           : "빈 칸",
       );
     }
@@ -5784,10 +5688,10 @@
 
     const currentAmmo = getCurrentCannonAmmo();
     if (currentAmmo && isDeliverableAmmoForCurrentOrder(currentAmmo.type, currentAmmo.level)) {
-      return `${FOODS[currentAmmo.type].name} 칸에 넣으세요.`;
+      return `${FOODS[currentAmmo.type].name} 칸에 배달하세요.`;
     }
     if (currentAmmo && isGrowthAmmoForCurrentOrder(currentAmmo.type, currentAmmo.level)) {
-      return `${getFoodName(currentAmmo.type, currentAmmo.level)}끼리 맞추세요.`;
+      return `중앙 ${getFoodName(currentAmmo.type, currentAmmo.level)} 맞추기.`;
     }
 
     const id = Object.keys(game.order || {}).find((key) => {
@@ -5797,7 +5701,7 @@
 
     const { type, level } = parseOrderKey(id);
     if (level <= 0) {
-      return `${FOODS[type].name} 칸에 넣으세요.`;
+      return `${FOODS[type].name} 칸에 배달하세요.`;
     }
     return getMergeActionHint(type, level);
   }
@@ -5882,8 +5786,8 @@
 
   function getTutorialHintText(step = getTutorialCoachStep()) {
     if (!step) return "연습을 준비하세요";
-    if (step.wait === "deliver") return step.id === "directDelivery" ? "밥 칸에 넣으세요" : "밥 칸에 배달하세요";
-    if (step.wait === "merge") return "가운데 밥을 맞추세요";
+    if (step.wait === "deliver") return step.id === "directDelivery" ? "밥 칸에 배달하세요" : "밥 칸에 배달하세요";
+    if (step.wait === "merge") return "중앙 밥 맞추기";
     if (step.wait === "booster") return "화살표를 맞추세요";
     if (step.wait === "finish") return "연습 끝";
     return "아무 곳이나 눌러 다음으로";
@@ -5910,10 +5814,8 @@
     game.tutorialTypeTimer = 0;
     game.running = false;
     game.awaitingFirstInput = false;
-    if (step.setup !== "feverPractice") {
-      game.feverTimer = 0;
-      game.autoFireTimer = 0;
-    }
+    game.feverTimer = 0;
+    game.autoFireTimer = 0;
     resetControls();
     setupTutorialCoachStep(step);
     setCharacterReaction(step.reaction || getTutorialHintText(step), "happy", 2);
@@ -5947,66 +5849,6 @@
       return;
     }
 
-    if (step.setup === "scoreMerge") {
-      setupTutorialOrder("rice", 1);
-      setCannonAmmo(createAmmo("rice", 0, false));
-      setNextCannonAmmo(createAmmo("rice", 0, false));
-      spawnTutorialMergeTarget();
-      return;
-    }
-
-    if (step.setup === "scoreDelivery") {
-      setupTutorialOrder("rice", 1);
-      loadPreparedAmmo(createAmmo("rice", 1, true), "배달 점수 체험");
-      setNextCannonAmmo(createAmmo("rice", 0, false));
-      return;
-    }
-
-    if (step.setup === "scoreFastDelivery") {
-      setupTutorialOrder("rice", 0);
-      game.orderRule = ORDER_RULES.fast;
-      game.orderElapsed = 0;
-      setCannonAmmo(createAmmo("rice", 0, false));
-      setNextCannonAmmo(createAmmo("rice", 0, false));
-      return;
-    }
-
-    if (step.setup === "scoreComboMerge") {
-      setupTutorialOrder("rice", 1);
-      game.combo = Math.max(game.combo, 5);
-      game.maxCombo = Math.max(game.maxCombo, game.combo);
-      setCannonAmmo(createAmmo("rice", 0, false));
-      setNextCannonAmmo(createAmmo("rice", 0, false));
-      spawnTutorialMergeTarget();
-      updateUi(false);
-      return;
-    }
-
-    if (step.setup === "feverPractice") {
-      setupTutorialOrder("rice", 0);
-      setCannonAmmo(createAmmo("rice", 0, false));
-      setNextCannonAmmo(createAmmo("rice", 0, false));
-      activateFever("피버 풀파워 자동발사!");
-      return;
-    }
-
-    if (step.setup === "boosterPractice") {
-      setupTutorialOrder("rice", 0);
-      setCannonAmmo(createAmmo("rice", 0, false));
-      setNextCannonAmmo(createAmmo("rice", 0, false));
-      const pad = game.launchPads[0];
-      if (pad) {
-        pad.x = 0;
-        pad.y = 82;
-        pad.radius = 30;
-        pad.captureRadius = 98;
-        pad.activeTimer = 20;
-        pad.respawnTimer = 0;
-        pad.directionAngle = -Math.PI / 2;
-        pad.flash = 0.3;
-        updateLaunchPadBodies();
-      }
-    }
   }
 
   function setupTutorialOrder(type, level) {
@@ -6064,8 +5906,10 @@
     if (!show) return;
 
     const character = CHARACTERS[meta.selectedCharacter] || CHARACTERS.cook;
-    ui.tutorialCoachAvatar.textContent = character.short || "요";
-    ui.tutorialCoachAvatar.style.backgroundColor = character.color;
+    if (ui.tutorialCoachAvatarImage) {
+      ui.tutorialCoachAvatarImage.src = character.image;
+    }
+    ui.tutorialCoachAvatar.style.backgroundColor = "#fff8da";
     ui.tutorialCoachText.textContent = game.tutorialTypedText || "";
     ui.tutorialCoach.classList.toggle("is-waiting-action", game.tutorialActionReady);
 
@@ -6513,7 +6357,7 @@
     ctx.font = "900 13px system-ui, sans-serif";
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
-    const label = "타겟을 맞춰 성장";
+    const label = "중앙 재료 맞추기";
     ctx.fillText(label, CENTER.x, PICKUP_ZONE_TOP + 20);
     ctx.restore();
   }
@@ -6686,6 +6530,7 @@
   }
 
   function drawAmmoStash() {
+    return;
     if (!game.tutorialActive) return;
 
     const rects = getAmmoSlotRects();
@@ -6712,7 +6557,7 @@
       ctx.font = "950 13px system-ui, sans-serif";
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
-      ctx.fillText(`${getFoodShortLabel(ammo.type, ammo.level)} 배송 준비`, deliveryRect.x + deliveryRect.width / 2, deliveryRect.y + deliveryRect.height / 2);
+      ctx.fillText(`${getFoodShortLabel(ammo.type, ammo.level)} 지금 재료`, deliveryRect.x + deliveryRect.width / 2, deliveryRect.y + deliveryRect.height / 2);
       if (promptDeliveryReady) {
         drawSmallBadge("지금 탭", deliveryRect.x + deliveryRect.width / 2, deliveryRect.y - 16, "#f1c453", "#18312b");
       }
@@ -6726,7 +6571,7 @@
     ctx.font = "950 15px system-ui, sans-serif";
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
-    ctx.fillText("장전칸", CENTER.x - 112, rects[0].y - 16);
+    ctx.fillText("재료칸", CENTER.x - 112, rects[0].y - 16);
 
     ctx.fillStyle = "rgba(44, 154, 160, 0.14)";
     ctx.strokeStyle = "rgba(44, 154, 160, 0.34)";
@@ -6736,7 +6581,7 @@
     ctx.stroke();
     ctx.fillStyle = "#1f5145";
     ctx.font = "950 12px system-ui, sans-serif";
-    ctx.fillText("탭 장전", CENTER.x - 27, rects[0].y - 16);
+    ctx.fillText("다시 쏘기", CENTER.x - 27, rects[0].y - 16);
 
     if (allowMerge) {
       ctx.fillStyle = canMergeStash ? "#2c9aa0" : "rgba(107, 121, 116, 0.18)";
@@ -7003,7 +6848,7 @@
       ctx.font = "950 12px system-ui, sans-serif";
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
-      const label = usefulPickup ? "배송 재료!" : "회수 가능";
+      const label = usefulPickup ? "다시 쏘기!" : "정리";
       const seconds = limitedPickup ? `${Math.max(1, Math.ceil(pickupRemaining / 1000))}초` : "연습";
       ctx.strokeText(label, 0, -radius - 23);
       ctx.fillText(label, 0, -radius - 23);

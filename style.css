@@ -457,11 +457,11 @@ h1 {
   top: 10px;
   left: 10px;
   z-index: 2;
-  width: min(330px, calc(100% - 20px));
+  width: min(300px, calc(100% - 20px));
   display: none;
   grid-template-columns: minmax(0, 1fr);
-  gap: 6px;
-  padding: 10px 12px;
+  gap: 4px;
+  padding: 7px 9px;
   border-radius: 8px;
   color: var(--leaf-dark);
   background: rgba(255, 255, 255, 0.88);
@@ -481,11 +481,10 @@ h1 {
   min-width: 0;
   overflow: hidden;
   color: var(--leaf-dark);
-  font-size: 1rem;
+  font-size: 0.88rem;
   font-weight: 950;
   line-height: 1.15;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  white-space: normal;
 }
 
 .mobile-order-hud em {
@@ -497,8 +496,7 @@ h1 {
   font-style: normal;
   font-weight: 950;
   line-height: 1.15;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  white-space: normal;
 }
 
 .mobile-order-hud.is-paused {
@@ -685,21 +683,21 @@ h1 {
 
 .character-hud {
   position: absolute;
-  right: 16px;
-  bottom: 14px;
+  right: 12px;
+  bottom: 10px;
   z-index: 2;
-  width: min(190px, 36%);
-  min-height: 108px;
+  width: min(150px, 30%);
+  min-height: 82px;
   display: grid;
-  grid-template-columns: 72px minmax(0, 1fr);
+  grid-template-columns: 54px minmax(0, 1fr);
   align-items: end;
-  gap: 8px;
+  gap: 6px;
   pointer-events: none;
 }
 
 .character-hud img {
-  width: 88px;
-  height: 108px;
+  width: 64px;
+  height: 82px;
   object-fit: contain;
   object-position: bottom center;
   filter: drop-shadow(0 10px 12px rgba(24, 49, 43, 0.22));
@@ -719,9 +717,9 @@ h1 {
 
 .character-callout {
   min-width: 0;
-  margin-bottom: 12px;
-  padding: 9px 10px;
-  border-radius: 8px;
+  margin-bottom: 8px;
+  padding: 6px 8px;
+  border-radius: 10px;
   background: rgba(255, 255, 255, 0.9);
   border: 1px solid rgba(24, 49, 43, 0.14);
   box-shadow: 0 10px 24px rgba(24, 49, 43, 0.16);
@@ -737,14 +735,14 @@ h1 {
 
 .character-callout strong {
   color: var(--leaf-dark);
-  font-size: 0.78rem;
+  font-size: 0.62rem;
   font-weight: 950;
 }
 
 .character-callout span {
   margin-top: 3px;
   color: var(--ink);
-  font-size: 0.86rem;
+  font-size: 0.72rem;
   font-weight: 900;
 }
 
@@ -786,15 +784,22 @@ h1 {
 .tutorial-coach-avatar {
   width: 58px;
   height: 58px;
-  display: grid;
-  place-items: center;
+  overflow: hidden;
   border-radius: 50%;
   color: #ffffff;
-  background: var(--teal);
+  background: #fff8da;
   border: 4px solid #ffffff;
   box-shadow: 0 8px 18px rgba(24, 49, 43, 0.18);
   font-size: 1.1rem;
   font-weight: 950;
+}
+
+.tutorial-coach-avatar img {
+  width: 115%;
+  height: 115%;
+  object-fit: cover;
+  object-position: center 28%;
+  transform: translate(-7%, -5%);
 }
 
 .tutorial-coach-copy {
@@ -1171,6 +1176,10 @@ body.is-debug .action-panel .balance-button {
   font-size: 0.72rem;
   line-height: 1.24;
   font-weight: 700;
+}
+
+.mobile-ammo-dock {
+  display: none !important;
 }
 
 .guide-tip {
@@ -1795,13 +1804,13 @@ body.is-debug .action-panel .balance-button {
   .character-hud {
     right: 10px;
     bottom: 8px;
-    width: min(178px, 48%);
-    grid-template-columns: 62px minmax(0, 1fr);
+    width: min(150px, 42%);
+    grid-template-columns: 54px minmax(0, 1fr);
   }
 
   .character-hud img {
-    width: 74px;
-    height: 92px;
+    width: 64px;
+    height: 82px;
   }
 }
 

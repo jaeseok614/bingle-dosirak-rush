@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>빙글도시락 캐논</title>
     <link rel="icon" href="favicon.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="style.css?v=20260513-compact-start" />
+    <link rel="stylesheet" href="style.css?v=20260513-simple-ui" />
   </head>
   <body>
     <main class="app-shell" aria-label="빙글도시락 캐논">
@@ -95,11 +95,6 @@
               <strong id="mobileOrderText">-</strong>
               <em id="mobileActionHint">지금: 밥 칸에 넣으세요</em>
             </div>
-            <div class="mobile-hud-meta">
-              <span id="mobileTimeText">60.0초</span>
-              <span id="mobileScoreText">0점</span>
-              <span id="mobileComboText">x1</span>
-            </div>
           </div>
           <div id="characterHud" class="character-hud" aria-live="polite">
             <img id="activeCharacterImage" src="assets/characters/cook.png" alt="" />
@@ -109,7 +104,9 @@
             </div>
           </div>
           <div id="tutorialCoach" class="tutorial-coach" hidden aria-live="polite">
-            <div id="tutorialCoachAvatar" class="tutorial-coach-avatar" aria-hidden="true">요</div>
+            <div id="tutorialCoachAvatar" class="tutorial-coach-avatar" aria-hidden="true">
+              <img id="tutorialCoachAvatarImage" src="assets/characters/cook.png" alt="" />
+            </div>
             <div class="tutorial-coach-copy">
               <span>연습 모드</span>
               <strong id="tutorialCoachText">쏘기, 합치기, 배달만 배우자.</strong>
@@ -128,41 +125,21 @@
                 </div>
                 <div class="guide-step">
                   <span class="guide-icon guide-dot" aria-hidden="true"></span>
-                  <strong>같은 재료 합체</strong>
-                  <p>같은 레벨 타겟을 맞추면 현재탄이 한 단계 성장합니다. 성장한 음식은 발사대로 돌아옵니다.</p>
+                  <strong>같은 재료 키우기</strong>
+                  <p>중앙에 뜨는 같은 재료를 맞추면 지금 재료가 한 단계 커집니다.</p>
                 </div>
                 <div class="guide-step">
                   <span class="guide-icon guide-item" aria-hidden="true">▣</span>
-                  <strong>완성 후 배달</strong>
-                  <p>완성 단계가 되면 중앙 타겟이 사라지고 위쪽 같은 색 배달칸에 넣으면 됩니다.</p>
-                </div>
-                <div class="guide-step">
-                  <span class="guide-icon guide-ring" aria-hidden="true"></span>
                   <strong>위 칸에 배달</strong>
-                  <p>주문 재료를 같은 색 위쪽 배달칸에 잠깐 머물게 하면 완료됩니다.</p>
+                  <p>중앙 재료가 사라지면 완성입니다. 위쪽 같은 재료 칸에 넣으세요.</p>
                 </div>
                 <div class="guide-step">
                   <span class="guide-icon guide-fever" aria-hidden="true">✦</span>
                   <strong>콤보와 피버</strong>
                   <p>합체와 배달을 이어가면 콤보가 오르고, 콤보 x8 또는 도시락 3개 연속이면 피버로 풀파워 자동발사합니다.</p>
                 </div>
-                <div class="guide-step">
-                  <span class="guide-icon guide-score" aria-hidden="true">+</span>
-                  <strong>점수 올리기</strong>
-                  <p>합체, 배달, 남은 시간, 콤보가 점수입니다. 빠르게 완성하고 실수 없이 이어가면 보너스가 커집니다.</p>
-                </div>
-                <div class="guide-step">
-                  <span class="guide-icon guide-arrow" aria-hidden="true">➜</span>
-                  <strong>화살표 부스터</strong>
-                  <p>중반부터 나타나며 닿은 재료를 화살표 방향으로 튕깁니다. 빠른 배달 루트로 활용하세요.</p>
-                </div>
-                <div class="guide-step">
-                  <span class="guide-icon guide-shop" aria-hidden="true">Lv</span>
-                  <strong>난이도 변화</strong>
-                  <p>본 게임은 주문 단계와 타겟 위치가 매번 섞입니다. 진행할수록 높은 단계 주문이 더 자주 나옵니다.</p>
-                </div>
               </div>
-              <p class="guide-tip">처음이면 연습 추천. 설명은 아무 곳이나 눌러 넘기고, 발사와 피버 자동발사는 직접 체험합니다.</p>
+              <p class="guide-tip">처음이면 연습 추천. 아무 곳이나 눌러 넘기고, 발사와 배달을 직접 해봅니다.</p>
               <div class="guide-actions">
                 <button id="tutorialStartButton" class="primary-button" type="button">연습하고 시작</button>
                 <button id="startButton" class="secondary-button" type="button">바로 시작</button>
@@ -301,28 +278,6 @@
           </div>
         </section>
 
-        <section id="mobileAmmoDock" class="mobile-ammo-dock" aria-label="모바일 장전대" hidden>
-          <div class="ammo-status">
-            <div id="mobileCurrentPanel">
-              <span>현재탄</span>
-              <strong id="mobileCurrentAmmo">-</strong>
-            </div>
-            <div id="mobileNextPanel">
-              <span>다음탄</span>
-              <strong id="mobileNextAmmo">-</strong>
-            </div>
-          </div>
-          <button id="mobileDeliveryReadyButton" class="mobile-delivery-button" type="button" hidden>배송 준비</button>
-          <div class="stash-title">추가 재료</div>
-          <div class="mobile-stash-buttons">
-            <button type="button" data-mobile-stash-index="0">비움</button>
-            <button type="button" data-mobile-stash-index="1">비움</button>
-            <button type="button" data-mobile-stash-index="2">비움</button>
-            <button type="button" data-mobile-stash-index="3">비움</button>
-          </div>
-          <button id="mobileStashMergeButton" class="mobile-merge-button" type="button">합치기</button>
-        </section>
-
         <aside class="action-panel" aria-label="조작">
           <button id="restartButton" class="secondary-button" type="button">재시작</button>
           <button id="guideButton" class="secondary-button guide-button" type="button">가이드</button>
@@ -332,6 +287,6 @@
     </main>
 
     <script src="vendor/matter.min.js"></script>
-    <script src="game.js?v=20260513-compact-start"></script>
+    <script src="game.js?v=20260513-simple-ui"></script>
   </body>
 </html>
