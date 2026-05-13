@@ -262,15 +262,29 @@
       reaction: "완성 후 배달",
     },
     {
-      id: "scoreTips",
-      text: "점수는 세 가지로 오릅니다. 타겟을 맞추면 합체 점수, 완성 재료를 배달하면 배달 점수, 빠르게 배달하면 남은 시간 보너스가 붙습니다.",
+      id: "mergeScoreTips",
+      text: "방금 중앙 타겟을 맞추며 합체 점수를 얻었습니다. 같은 재료를 더 높은 단계로 키울수록 합체 점수도 커집니다.",
+      wait: "next",
+      highlight: ["currentAmmo"],
+      reaction: "합체 점수 확인",
+    },
+    {
+      id: "deliveryScoreTips",
+      text: "방금 위 배달칸에 넣으며 배달 점수를 얻었습니다. 완성 단계가 높을수록 배달 점수가 더 큽니다.",
+      wait: "next",
+      highlight: ["slot:rice"],
+      reaction: "배달 점수 확인",
+    },
+    {
+      id: "timeScoreTips",
+      text: "배달은 빠를수록 좋습니다. 주문을 오래 끌지 않고 넣으면 남은 시간 보너스가 붙습니다.",
       wait: "next",
       highlight: [],
-      reaction: "합체 + 배달 + 시간!",
+      reaction: "빠른 배달 보너스",
     },
     {
       id: "comboTips",
-      text: "고득점은 콤보가 중요합니다. 합체와 배달을 실수 없이 이어가면 콤보 보너스가 커집니다. 다른 칸에 오래 머물면 콤보가 끊길 수 있습니다.",
+      text: "합체와 배달을 끊기지 않게 이어가면 콤보 보너스가 붙습니다. 다른 칸에 오래 머물거나 흐름이 끊기면 콤보가 약해집니다.",
       wait: "next",
       highlight: [],
       reaction: "콤보 유지",
@@ -298,7 +312,7 @@
     },
     {
       id: "autoFirePractice",
-      text: "이제 직접 체험합니다. 아래 자동발사 버튼을 누르거나 키보드 E를 누르세요. 자동으로 타겟을 향해 풀파워 발사가 시작됩니다.",
+      text: "이제 직접 체험합니다. 아래 자동발사 버튼을 누르거나 키보드 E를 누르세요. 몇 초 동안 현재 목표를 향해 풀파워로 계속 발사됩니다.",
       wait: "autoFire",
       setup: "autoFirePractice",
       highlight: ["currentAmmo", "tutorialTarget"],
@@ -1548,7 +1562,7 @@
     if (!aim) return false;
 
     setCannonAim(Math.atan2(aim.y - CANNON.y, aim.x - CANNON.x), aim.power);
-    fireCannonFromCurrentAim();
+    fireCannonFromCurrentAim({ allowTutorialAimAssist: false });
     return true;
   }
 
@@ -1567,10 +1581,15 @@
     }
 
     if (isGrowthAmmoForCurrentOrder(current.type, current.level)) {
-      let target = getActiveMergeTarget();
+      let target = game.tutorialActive ? getActiveTutorialMergeTarget() : getActiveMergeTarget();
       if (!target) {
-        ensureMergeTargetForCurrentAmmo(true);
-        target = getActiveMergeTarget();
+        if (game.tutorialActive) {
+          spawnTutorialMergeTarget();
+          target = getActiveTutorialMergeTarget();
+        } else {
+          ensureMergeTargetForCurrentAmmo(true);
+          target = getActiveMergeTarget();
+        }
       }
       if (!target) return null;
       return {
@@ -1827,14 +1846,16 @@
     };
   }
 
-  function fireCannonFromCurrentAim() {
+  function fireCannonFromCurrentAim(options = {}) {
     if (!canUseCannon()) return;
 
+    const allowTutorialAimAssist = options.allowTutorialAimAssist !== false;
     const now = performance.now();
     const type = game.cannon.loadedType || pickCannonType();
     const level = game.cannon.loadedLevel || 0;
     const fromStash = game.cannon.loadedFromStashAt > 0;
-    const openingAimTarget = game.tutorialActive ? getOpeningAimTarget(type, level) : null;
+    const openingAimTarget =
+      game.tutorialActive && allowTutorialAimAssist ? getOpeningAimTarget(type, level) : null;
     if (openingAimTarget) {
       setCannonAim(
         Math.atan2(openingAimTarget.y - CANNON.y, openingAimTarget.x - CANNON.x),
@@ -2742,6 +2763,10 @@
 
   function getActiveMergeTarget() {
     return game.pieces.find((piece) => piece.mergeTarget && !piece.scored && !piece.merging) || null;
+  }
+
+  function getActiveTutorialMergeTarget() {
+    return game.pieces.find((piece) => piece.tutorialTarget && !piece.scored && !piece.merging) || null;
   }
 
   function ensureMergeTargetForCurrentAmmo(force = false) {
@@ -3750,13 +3775,10 @@
   }
 
   function updateGuidedBoard(dt) {
-    if (game.tutorialActive) {
-      updatePickupZone(dt);
-      return;
-    }
-
     cleanupMissedShots();
     cleanupBlockingIngredients();
+
+    if (game.tutorialActive) return;
 
     const target = getActiveMergeTarget();
     if (target) {
@@ -3803,6 +3825,7 @@
   }
 
   function markPiecePickupReady(piece) {
+    if (game.tutorialActive) return;
     if (!piece || piece.pickupReady || piece.scored || piece.merging) return;
 
     const now = performance.now();
@@ -6871,8 +6894,9 @@
     const radius = food.radius;
     const lift = piece.bump > 0 ? piece.bump * 18 : 0;
     const now = performance.now();
-    const pickupRemaining = piece.pickupReady ? piece.pickupExpiresAt - now : Infinity;
-    const pickupBlink = piece.pickupReady && pickupRemaining <= PICKUP_BLINK_MS;
+    const showPickupState = !game.tutorialActive && piece.pickupReady;
+    const pickupRemaining = showPickupState ? piece.pickupExpiresAt - now : Infinity;
+    const pickupBlink = showPickupState && pickupRemaining <= PICKUP_BLINK_MS;
 
     if (piece.tutorialTarget && isIntroMergeStep()) {
       const pulse = 0.55 + Math.sin(now / 110) * 0.45;
@@ -6928,7 +6952,7 @@
     ctx.shadowColor = "transparent";
     if (piece.hold > 0) {
       drawHoldRing(radius + 9, piece.hold / getDeliveryHoldSeconds(), "#2c9aa0");
-    } else if (piece.pickupReady) {
+    } else if (showPickupState) {
       const usefulPickup = isAmmoUsefulForCurrentOrder(piece.type, piece.level);
       const limitedPickup = Number.isFinite(pickupRemaining);
       const total = limitedPickup ? Math.max(1, piece.pickupExpiresAt - piece.pickupReadyAt) : 1;
