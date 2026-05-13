@@ -20,7 +20,6 @@
     achievementButton: document.querySelector("#achievementButton"),
     balanceButton: document.querySelector("#balanceButton"),
     soundButton: document.querySelector("#soundButton"),
-    skill: document.querySelector("#skillButton"),
     orderNumber: document.querySelector("#orderNumber"),
     orderRule: document.querySelector("#orderRule"),
     orderHint: document.querySelector("#orderHint"),
@@ -199,7 +198,6 @@
   const MERGE_TARGET_VISIBLE_MS = 1650;
   const MERGE_TARGET_RESPAWN_MS = 620;
   const MISSED_SHOT_CLEANUP_MS = 2400;
-  const AUTO_FIRE_SECONDS = 4.2;
   const AMMO_STASH_SIZE = 4;
   let PICKUP_ZONE_TOP = ARENA.bottom - 86;
   const PICKUP_SETTLE_SECONDS = 0.52;
@@ -316,47 +314,18 @@
     },
     {
       id: "feverPractice",
-      text: "피버 체험입니다. 피버 중에는 목표를 자동으로 조준합니다. 완성된 밥은 위 밥 칸으로 자동 조준됩니다. 그대로 발사해보세요.",
+      text: "피버 체험입니다. 피버가 켜지면 몇 초 동안 자동으로 발사하고 목표도 자동 조준합니다. 합체 전이면 타겟, 완성되면 배달칸을 우선합니다.",
       wait: "deliver",
       setup: "feverPractice",
       highlight: ["currentAmmo", "slot:rice"],
-      reaction: "피버 자동 조준 체험",
+      reaction: "피버 자동발사 체험",
     },
     {
       id: "feverTips",
-      text: "본 게임에서는 콤보 x8을 만들거나 도시락 3개를 연속 완성하면 피버가 켜집니다. 피버 중에는 합체 타겟과 배달칸을 자동으로 잡아줍니다.",
+      text: "본 게임에서는 콤보 x8을 만들거나 도시락 3개를 연속 완성하면 피버가 켜집니다. 피버 중에는 자동발사와 자동 조준이 같이 작동합니다.",
       wait: "next",
       highlight: [],
-      reaction: "피버는 자동 조준 찬스",
-    },
-    {
-      id: "autoFireUnlockTips",
-      text: "자동발사는 본 게임에서 도시락 2개를 완성하면 열립니다. 화면 아래 자동발사 버튼이 켜지고, 키보드에서는 E키로 사용할 수 있습니다.",
-      wait: "next",
-      highlight: [],
-      reaction: "2개 완성 후 자동발사!",
-    },
-    {
-      id: "autoFireUseTips",
-      text: "자동발사를 누르면 4초 동안 풀파워로 계속 발사됩니다. 성장 중이면 중앙 타겟을 맞추고, 완성 상태면 위 배달칸을 노립니다.",
-      wait: "next",
-      highlight: [],
-      reaction: "4초 풀파워 연사!",
-    },
-    {
-      id: "autoFirePractice",
-      text: "이제 직접 체험합니다. 아래 자동발사 버튼을 누르거나 키보드 E를 누르세요. 몇 초 동안 현재 목표를 향해 풀파워로 계속 발사됩니다.",
-      wait: "autoFire",
-      setup: "autoFirePractice",
-      highlight: ["currentAmmo", "tutorialTarget"],
-      reaction: "자동발사 버튼 또는 E!",
-    },
-    {
-      id: "autoFireCooldownTips",
-      text: "자동발사를 사용하면 버튼에 남은 초가 표시됩니다. 쿨타임이 끝난 뒤 다시 눌러 중요한 주문을 빠르게 처리하세요.",
-      wait: "next",
-      highlight: [],
-      reaction: "쿨타임 확인!",
+      reaction: "피버는 자동발사 찬스",
     },
     {
       id: "boosterPractice",
@@ -396,7 +365,7 @@
     },
     {
       id: "outro",
-      text: "정리합니다. 타겟을 맞춰 현재탄을 키우고, 완성되면 위 칸에 배달하세요. 빠른 배달, 콤보, 피버, 자동발사, 화살표 활용이 고득점 핵심입니다.",
+      text: "정리합니다. 타겟을 맞춰 현재탄을 키우고, 완성되면 위 칸에 배달하세요. 빠른 배달, 콤보, 피버 자동발사, 화살표 활용이 고득점 핵심입니다.",
       wait: "finish",
       highlight: [],
       reaction: "연습 끝!",
@@ -473,7 +442,7 @@
       cost: 70,
       color: "#e85d4f",
       image: "assets/characters/sprinter.png",
-      description: "발사 속도 +15%, 자동발사 쿨타임 -15%",
+      description: "발사 속도 +15%, 피버 연사 간격 -15%",
       stats: {
         rotate: 1.15,
         score: 1,
@@ -1181,10 +1150,6 @@
         fireCannonFromCurrentAim();
         event.preventDefault();
       }
-      if (event.key.toLowerCase() === "e") {
-        useSkill();
-        event.preventDefault();
-      }
     });
 
     window.addEventListener("keyup", (event) => {
@@ -1252,7 +1217,6 @@
     ui.balanceClose.addEventListener("click", closeBalance);
     ui.balanceReset.addEventListener("click", resetBalance);
     ui.balanceList.addEventListener("input", handleBalanceInput);
-    ui.skill.addEventListener("click", useSkill);
     ui.guide.addEventListener("click", showGuide);
     ui.tutorialStart?.addEventListener("click", () => closeGuide({ forceTutorial: true }));
     ui.tutorialCoach?.addEventListener("click", handleTutorialCoachClick);
@@ -1585,37 +1549,6 @@
         button.classList.toggle("is-active", active);
       }
     }
-  }
-
-  function useSkill() {
-    const tutorialAutoFire = game.tutorialActive && isTutorialActionAllowed("autoFire");
-    if (
-      !game.running ||
-      (game.skillCooldown > 0 && !tutorialAutoFire) ||
-      (game.tutorialActive && !tutorialAutoFire) ||
-      (!game.tutorialActive && !shouldUnlockSkill())
-    ) {
-      return;
-    }
-
-    unlockAudio();
-    game.autoFireTimer = AUTO_FIRE_SECONDS;
-    autoFireCannon();
-
-    game.skillCooldown = Math.max(AUTO_FIRE_SECONDS + 1.2, SKILL_COOLDOWN * getCharacterStats().skillCooldown);
-    game.itemMessage = "자동발사 ON!";
-    game.itemMessageTimer = 1.4;
-    showFloatingText("자동발사 ON!", CENTER.x, CENTER.y - 78, "#f1c453", 34);
-    setCharacterReaction("자동발사!", "skill", 1.3);
-    if (tutorialAutoFire) {
-      window.setTimeout(() => {
-        game.autoFireTimer = 0;
-        game.skillCooldown = 0;
-        completeTutorialAction("autoFire");
-        updateUi(false);
-      }, 1400);
-    }
-    updateUi(false);
   }
 
   function autoFireCannon() {
@@ -1980,10 +1913,13 @@
     game.cannon.charging = false;
     game.cannon.chargeTime = 0;
     game.cannon.pointerId = null;
-    game.cannon.reloadTimer = CANNON.reloadSeconds * getRushConfig().reloadMultiplier * (game.feverTimer > 0 ? 0.62 : 1);
+    game.cannon.reloadTimer =
+      CANNON.reloadSeconds *
+      getRushConfig().reloadMultiplier *
+      (game.feverTimer > 0 ? 0.62 * getCharacterStats().skillCooldown : 1);
     game.cannon.flash = 0.28;
     game.cannon.shotCount += 1;
-    game.itemMessage = game.feverTimer > 0 ? "피버 자동 조준!" : `${getFoodName(type, level)} 발사!`;
+    game.itemMessage = game.feverTimer > 0 ? "피버 자동발사!" : `${getFoodName(type, level)} 발사!`;
     game.itemMessageTimer = 0.9;
     burst(CANNON.x, CANNON.y, FOODS[type].color, game.feverTimer > 0 ? 28 : 18);
     if (!isGrowthAmmoForCurrentOrder(type, level) && !isDeliverableAmmoForCurrentOrder(type, level)) {
@@ -2474,10 +2410,6 @@
     return (!game.tutorialActive && game.completed >= 2) || isTutorialActionAllowed("booster");
   }
 
-  function shouldUnlockSkill() {
-    return !game.tutorialActive && game.completed >= 2;
-  }
-
   function getIntroOrderSpec() {
     return OPENING_ORDER_SPECS[getIntroStep()] || null;
   }
@@ -2581,13 +2513,6 @@
       setNextCannonAmmo(createSmartAmmo());
     }
     syncBoardForCurrentAmmo();
-    if (game.started && shouldUnlockSkill() && !game.skillUnlockShown) {
-      game.skillUnlockShown = true;
-      game.itemMessage = "자동발사 해금!";
-      game.itemMessageTimer = 1.8;
-      showFloatingText("자동발사 가능: 버튼/E를 누르면 4초 풀파워 연사", CENTER.x, CENTER.y - 86, "#f1c453", 30);
-      setCharacterReaction("자동발사를 쓸 수 있어요", "happy", 1.6);
-    }
     updateUi(true);
   }
 
@@ -3247,7 +3172,7 @@
   }
 
   function handleTutorialMergeComplete(merged) {
-    const tutorialMergeActive = isTutorialActionAllowed("merge") || isTutorialActionAllowed("autoFire");
+    const tutorialMergeActive = isTutorialActionAllowed("merge");
     if (!merged || !game.tutorialActive || !tutorialMergeActive) return false;
 
     const ammo = createAmmo(merged.type, merged.level, true);
@@ -3258,13 +3183,6 @@
     game.itemMessageTimer = 1.4;
     if (isTutorialActionAllowed("merge")) {
       completeTutorialAction("merge");
-    } else if (isTutorialActionAllowed("autoFire")) {
-      window.setTimeout(() => {
-        game.autoFireTimer = 0;
-        game.skillCooldown = 0;
-        completeTutorialAction("autoFire");
-        updateUi(false);
-      }, 450);
     }
     return true;
   }
@@ -4431,6 +4349,8 @@
 
   function activateFever(message) {
     game.feverTimer = FEVER_SECONDS;
+    game.autoFireTimer = FEVER_SECONDS;
+    game.skillCooldown = 0;
     game.runStats.feverActivations += 1;
     game.feverParticleTimer = 0;
     game.itemSpawnTimer = Math.min(game.itemSpawnTimer, 1.2);
@@ -5626,18 +5546,9 @@
     ui.completed.textContent = `${game.completed}`;
     ui.item.textContent = getItemStatusText();
     ui.fever.textContent = getFeverStatusText();
-    ui.skill.textContent = isPortraitLayout() ? getPortraitSkillButtonText() : getSkillButtonText();
     if (ui.orderHint) {
       ui.orderHint.textContent = getOrderHintText();
     }
-    ui.skill.hidden = !(shouldUnlockSkill() || (game.tutorialActive && isTutorialActionAllowed("autoFire")));
-    ui.skill.disabled =
-      game.skillCooldown > 0 ||
-      !game.started ||
-      !game.running ||
-      (game.tutorialActive && !isTutorialActionAllowed("autoFire")) ||
-      (!game.tutorialActive && !shouldUnlockSkill()) ||
-      !canUseCannon();
     updateModeAndRuleUi();
     updateMetaUi();
     updateMobileHud();
@@ -5864,29 +5775,9 @@
 
   function getFeverStatusText() {
     if (game.feverTimer > 0) {
-      return `${Math.ceil(game.feverTimer)}초 자동조준`;
+      return `${Math.ceil(game.feverTimer)}초 자동발사`;
     }
     return `x${FEVER_COMBO} 대기`;
-  }
-
-  function getSkillButtonText() {
-    if (game.autoFireTimer > 0) {
-      return `연사 ${Math.ceil(game.autoFireTimer)}초`;
-    }
-    if (game.skillCooldown > 0) {
-      return `자동 ${Math.ceil(game.skillCooldown)}초`;
-    }
-    return "자동발사";
-  }
-
-  function getPortraitSkillButtonText() {
-    if (game.autoFireTimer > 0) {
-      return `${Math.ceil(game.autoFireTimer)}초`;
-    }
-    if (game.skillCooldown > 0) {
-      return `${Math.ceil(game.skillCooldown)}초`;
-    }
-    return "자동";
   }
 
   function getShortActionHint() {
@@ -6005,7 +5896,6 @@
     if (!step) return "연습을 준비하세요";
     if (step.wait === "deliver") return step.id === "directDelivery" ? "밥 칸에 넣으세요" : "밥 칸에 배달하세요";
     if (step.wait === "merge") return "가운데 밥을 맞추세요";
-    if (step.wait === "autoFire") return "자동발사 버튼 또는 E를 누르세요";
     if (step.wait === "booster") return "화살표를 맞추세요";
     if (step.wait === "finish") return "연습 끝";
     return "아무 곳이나 눌러 다음으로";
@@ -6034,6 +5924,7 @@
     game.awaitingFirstInput = false;
     if (step.setup !== "feverPractice") {
       game.feverTimer = 0;
+      game.autoFireTimer = 0;
     }
     resetControls();
     setupTutorialCoachStep(step);
@@ -6108,14 +5999,6 @@
       setCannonAmmo(createAmmo("rice", 0, false));
       setNextCannonAmmo(createAmmo("rice", 0, false));
       activateFever("피버 자동 조준!");
-      return;
-    }
-
-    if (step.setup === "autoFirePractice") {
-      setupTutorialOrder("rice", 1);
-      setCannonAmmo(createAmmo("rice", 0, false));
-      setNextCannonAmmo(createAmmo("rice", 0, false));
-      spawnTutorialMergeTarget();
       return;
     }
 
