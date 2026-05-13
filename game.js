@@ -1760,7 +1760,13 @@
   }
 
   function handleCannonPointerMove(event) {
-    if (!game.cannon.aiming || game.cannon.pointerId !== event.pointerId) return;
+    if (!game.cannon.aiming) {
+      if (event.pointerType !== "touch" && canUseCannon()) {
+        updateCannonAim(getCanvasPoint(event));
+      }
+      return;
+    }
+    if (game.cannon.pointerId !== event.pointerId) return;
 
     event.preventDefault();
     updateCannonAim(getCanvasPoint(event));
