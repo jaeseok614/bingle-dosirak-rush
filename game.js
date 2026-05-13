@@ -1556,7 +1556,7 @@
     const tutorialAutoFire = game.tutorialActive && isTutorialActionAllowed("autoFire");
     if (
       !game.running ||
-      game.skillCooldown > 0 ||
+      (game.skillCooldown > 0 && !tutorialAutoFire) ||
       (game.tutorialActive && !tutorialAutoFire) ||
       (!game.tutorialActive && !shouldUnlockSkill())
     ) {
@@ -1574,7 +1574,10 @@
     setCharacterReaction("자동발사!", "skill", 1.3);
     if (tutorialAutoFire) {
       window.setTimeout(() => {
+        game.autoFireTimer = 0;
+        game.skillCooldown = 0;
         completeTutorialAction("autoFire");
+        updateUi(false);
       }, 1400);
     }
     updateUi(false);
@@ -3206,6 +3209,13 @@
     game.itemMessageTimer = 1.4;
     if (isTutorialActionAllowed("merge")) {
       completeTutorialAction("merge");
+    } else if (isTutorialActionAllowed("autoFire")) {
+      window.setTimeout(() => {
+        game.autoFireTimer = 0;
+        game.skillCooldown = 0;
+        completeTutorialAction("autoFire");
+        updateUi(false);
+      }, 450);
     }
     return true;
   }
