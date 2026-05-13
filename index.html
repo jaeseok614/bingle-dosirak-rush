@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>빙글도시락 캐논</title>
     <link rel="icon" href="favicon.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="style.css?v=20260513-auto-fire-random" />
+    <link rel="stylesheet" href="style.css?v=20260513-tutorial-detail" />
   </head>
   <body>
     <main class="app-shell" aria-label="빙글도시락 캐논">
@@ -146,8 +146,28 @@
                   <strong>콤보와 피버</strong>
                   <p>합체와 배달을 이어가면 콤보가 오르고, 콤보 x8 또는 도시락 3개 연속이면 피버로 2발씩 발사합니다.</p>
                 </div>
+                <div class="guide-step">
+                  <span class="guide-icon guide-score" aria-hidden="true">+</span>
+                  <strong>점수 올리기</strong>
+                  <p>합체, 배달, 남은 시간, 콤보가 점수입니다. 빠르게 완성하고 실수 없이 이어가면 보너스가 커집니다.</p>
+                </div>
+                <div class="guide-step">
+                  <span class="guide-icon guide-skill" aria-hidden="true">A</span>
+                  <strong>자동발사</strong>
+                  <p>도시락 2개 완성 후 버튼과 E키가 열립니다. 누르면 4초 동안 타겟이나 배달칸으로 풀파워 연사합니다.</p>
+                </div>
+                <div class="guide-step">
+                  <span class="guide-icon guide-arrow" aria-hidden="true">➜</span>
+                  <strong>화살표 부스터</strong>
+                  <p>중반부터 나타나며 닿은 재료를 화살표 방향으로 튕깁니다. 빠른 배달 루트로 활용하세요.</p>
+                </div>
+                <div class="guide-step">
+                  <span class="guide-icon guide-shop" aria-hidden="true">Lv</span>
+                  <strong>난이도 변화</strong>
+                  <p>본 게임은 주문 단계와 타겟 위치가 매번 섞입니다. 진행할수록 높은 단계 주문이 더 자주 나옵니다.</p>
+                </div>
               </div>
-              <p class="guide-tip">처음이면 연습 추천. 첫 5개 주문은 한 번에 하나씩 열리고, 상단 힌트가 지금 할 일을 알려줍니다.</p>
+              <p class="guide-tip">처음이면 연습 추천. 코치가 점수, 자동발사, 화살표 부스터, 난이도 변화까지 차례로 알려줍니다.</p>
               <div class="guide-actions">
                 <button id="tutorialStartButton" class="primary-button" type="button">연습하고 시작</button>
                 <button id="startButton" class="secondary-button" type="button">바로 시작</button>
@@ -318,6 +338,6 @@
     </main>
 
     <script src="vendor/matter.min.js"></script>
-    <script src="game.js?v=20260513-auto-fire-random"></script>
+    <script src="game.js?v=20260513-tutorial-detail"></script>
   </body>
 </html>
