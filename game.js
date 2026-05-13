@@ -315,11 +315,19 @@
       reaction: "콤보 유지",
     },
     {
+      id: "feverPractice",
+      text: "피버 체험입니다. 피버 중에는 목표를 자동으로 조준합니다. 완성된 밥은 위 밥 칸으로 자동 조준됩니다. 그대로 발사해보세요.",
+      wait: "deliver",
+      setup: "feverPractice",
+      highlight: ["currentAmmo", "slot:rice"],
+      reaction: "피버 자동 조준 체험",
+    },
+    {
       id: "feverTips",
-      text: "콤보 x8을 만들거나 도시락 3개를 연속 완성하면 피버가 켜집니다. 피버 중에는 2발씩 발사되고 점수 보너스를 노릴 수 있습니다.",
+      text: "본 게임에서는 콤보 x8을 만들거나 도시락 3개를 연속 완성하면 피버가 켜집니다. 피버 중에는 합체 타겟과 배달칸을 자동으로 잡아줍니다.",
       wait: "next",
       highlight: [],
-      reaction: "피버는 고득점 찬스!",
+      reaction: "피버는 자동 조준 찬스",
     },
     {
       id: "autoFireUnlockTips",
@@ -351,11 +359,19 @@
       reaction: "쿨타임 확인!",
     },
     {
+      id: "boosterPractice",
+      text: "화살표 체험입니다. 중앙 화살표에 밥을 맞추세요. 재료가 화살표 방향으로 튕겨 나가는 것을 확인하면 됩니다.",
+      wait: "booster",
+      setup: "boosterPractice",
+      highlight: ["currentAmmo"],
+      reaction: "화살표 맞추기",
+    },
+    {
       id: "boosterUnlockTips",
-      text: "화살표 부스터도 본 게임에서 도시락 2개를 완성한 뒤부터 나타납니다. 화면 안에 잠깐 생겼다가 사라지는 방향 표시입니다.",
+      text: "본 게임에서는 도시락 2개를 완성한 뒤부터 화살표가 잠깐씩 나타납니다. 닿은 재료를 화살표 방향으로 튕깁니다.",
       wait: "next",
       highlight: [],
-      reaction: "2개 완성 후 화살표!",
+      reaction: "2개 완성 후 화살표",
     },
     {
       id: "boosterHitTips",
@@ -1368,6 +1384,24 @@
     }
   }
 
+  function resetLaunchPadsToLayout() {
+    for (const [index, pad] of game.launchPads.entries()) {
+      const config = LAUNCH_PAD_LAYOUT[index];
+      if (!config) continue;
+      pad.x = config.x;
+      pad.y = config.y;
+      pad.radius = config.radius;
+      pad.color = config.color;
+      pad.edge = config.edge;
+      pad.captureRadius = config.captureRadius || BOOSTER_CAPTURE_RADIUS;
+      pad.activeTimer = index < 2 ? randomRange(1.8, 3.4, game.itemRng) : 0;
+      pad.respawnTimer = index < 2 ? 0 : randomRange(1.2, 4.2, game.itemRng);
+      pad.directionAngle = pickBoosterDirection();
+      pad.flash = 0;
+    }
+    updateLaunchPadBodies();
+  }
+
   function pickBoosterDirection() {
     return BOOSTER_DIRECTIONS[Math.floor(game.itemRng() * BOOSTER_DIRECTIONS.length)] || -Math.PI / 2;
   }
@@ -1476,6 +1510,7 @@
     resetCannonLoad();
     game.nextOrderDelay = 0;
     game.lastFrame = 0;
+    resetLaunchPadsToLayout();
     ui.modal.hidden = true;
     ui.shopOverlay.hidden = true;
     ui.characterSelectOverlay.hidden = true;
@@ -1886,13 +1921,21 @@
   function fireCannonFromCurrentAim(options = {}) {
     if (!canUseCannon()) return;
 
-    const allowTutorialAimAssist = options.allowTutorialAimAssist !== false;
+    const allowTutorialAimAssist = options.allowTutorialAimAssist === true;
     const now = performance.now();
     const type = game.cannon.loadedType || pickCannonType();
     const level = game.cannon.loadedLevel || 0;
     const fromStash = game.cannon.loadedFromStashAt > 0;
+    const feverAimTarget =
+      game.feverTimer > 0 && !Number.isFinite(options.lockedAngle) ? getAutoFireAimPoint() : null;
+    if (feverAimTarget) {
+      setCannonAim(
+        Math.atan2(feverAimTarget.y - CANNON.y, feverAimTarget.x - CANNON.x),
+        Math.max(game.cannon.power, feverAimTarget.power),
+      );
+    }
     const openingAimTarget =
-      game.tutorialActive && allowTutorialAimAssist ? getOpeningAimTarget(type, level) : null;
+      !feverAimTarget && game.tutorialActive && allowTutorialAimAssist ? getOpeningAimTarget(type, level) : null;
     if (openingAimTarget) {
       setCannonAim(
         Math.atan2(openingAimTarget.y - CANNON.y, openingAimTarget.x - CANNON.x),
@@ -1916,7 +1959,7 @@
       (0.76 + shotPower * 0.46) *
       getCharacterStats().rotate *
       (tutorialDeliveryShot ? 1.18 : openingDeliveryShot ? 1.14 : 1);
-    const feverShotCount = game.feverTimer > 0 ? 2 : 1;
+    const feverShotCount = 1;
     trimCannonBoard();
     markFirstInput();
 
@@ -1940,9 +1983,9 @@
     game.cannon.reloadTimer = CANNON.reloadSeconds * getRushConfig().reloadMultiplier * (game.feverTimer > 0 ? 0.62 : 1);
     game.cannon.flash = 0.28;
     game.cannon.shotCount += 1;
-    game.itemMessage = feverShotCount > 1 ? `${getFoodName(type, level)} 2발!` : `${getFoodName(type, level)} 발사!`;
+    game.itemMessage = game.feverTimer > 0 ? "피버 자동 조준!" : `${getFoodName(type, level)} 발사!`;
     game.itemMessageTimer = 0.9;
-    burst(CANNON.x, CANNON.y, FOODS[type].color, feverShotCount > 1 ? 28 : 18);
+    burst(CANNON.x, CANNON.y, FOODS[type].color, game.feverTimer > 0 ? 28 : 18);
     if (!isGrowthAmmoForCurrentOrder(type, level) && !isDeliverableAmmoForCurrentOrder(type, level)) {
       advanceCannonLoad();
     }
@@ -2354,6 +2397,12 @@
     burst(pad.body.position.x, pad.body.position.y, pad.color, 16);
     playSound("item");
     vibrate(10);
+    if (isTutorialActionAllowed("booster")) {
+      window.setTimeout(() => {
+        completeTutorialAction("booster");
+        updateUi(false);
+      }, 650);
+    }
   }
 
   function clearIngredients() {
@@ -2422,7 +2471,7 @@
   }
 
   function shouldAllowActionExtras() {
-    return !game.tutorialActive && game.completed >= 2;
+    return (!game.tutorialActive && game.completed >= 2) || isTutorialActionAllowed("booster");
   }
 
   function shouldUnlockSkill() {
@@ -4360,6 +4409,7 @@
 
   function checkFeverTriggers() {
     if (game.feverTimer > 0) return;
+    if (game.tutorialActive) return;
 
     if (!game.tutorialActive && game.completed >= 3 && game.runStats.feverActivations === 0) {
       game.orderStreak = 0;
@@ -5814,7 +5864,7 @@
 
   function getFeverStatusText() {
     if (game.feverTimer > 0) {
-      return `${Math.ceil(game.feverTimer)}초 2발`;
+      return `${Math.ceil(game.feverTimer)}초 자동조준`;
     }
     return `x${FEVER_COMBO} 대기`;
   }
@@ -5956,6 +6006,7 @@
     if (step.wait === "deliver") return step.id === "directDelivery" ? "밥 칸에 넣으세요" : "밥 칸에 배달하세요";
     if (step.wait === "merge") return "가운데 밥을 맞추세요";
     if (step.wait === "autoFire") return "자동발사 버튼 또는 E를 누르세요";
+    if (step.wait === "booster") return "화살표를 맞추세요";
     if (step.wait === "finish") return "연습 끝";
     return "아무 곳이나 눌러 다음으로";
   }
@@ -5981,6 +6032,9 @@
     game.tutorialTypeTimer = 0;
     game.running = false;
     game.awaitingFirstInput = false;
+    if (step.setup !== "feverPractice") {
+      game.feverTimer = 0;
+    }
     resetControls();
     setupTutorialCoachStep(step);
     setCharacterReaction(step.reaction || getTutorialHintText(step), "happy", 2);
@@ -6049,11 +6103,38 @@
       return;
     }
 
+    if (step.setup === "feverPractice") {
+      setupTutorialOrder("rice", 0);
+      setCannonAmmo(createAmmo("rice", 0, false));
+      setNextCannonAmmo(createAmmo("rice", 0, false));
+      activateFever("피버 자동 조준!");
+      return;
+    }
+
     if (step.setup === "autoFirePractice") {
       setupTutorialOrder("rice", 1);
       setCannonAmmo(createAmmo("rice", 0, false));
       setNextCannonAmmo(createAmmo("rice", 0, false));
       spawnTutorialMergeTarget();
+      return;
+    }
+
+    if (step.setup === "boosterPractice") {
+      setupTutorialOrder("rice", 0);
+      setCannonAmmo(createAmmo("rice", 0, false));
+      setNextCannonAmmo(createAmmo("rice", 0, false));
+      const pad = game.launchPads[0];
+      if (pad) {
+        pad.x = 0;
+        pad.y = 82;
+        pad.radius = 30;
+        pad.captureRadius = 98;
+        pad.activeTimer = 20;
+        pad.respawnTimer = 0;
+        pad.directionAngle = -Math.PI / 2;
+        pad.flash = 0.3;
+        updateLaunchPadBodies();
+      }
     }
   }
 
@@ -6266,8 +6347,8 @@
     ctx.strokeText("피버 주방!", WIDTH / 2, 18);
     ctx.fillText("피버 주방!", WIDTH / 2, 18);
     ctx.font = "950 24px system-ui, sans-serif";
-    ctx.strokeText("2발 발사", WIDTH / 2, 68);
-    ctx.fillText("2발 발사", WIDTH / 2, 68);
+    ctx.strokeText("자동 조준", WIDTH / 2, 68);
+    ctx.fillText("자동 조준", WIDTH / 2, 68);
     ctx.restore();
   }
 
