@@ -262,29 +262,54 @@
       reaction: "완성 후 배달",
     },
     {
-      id: "mergeScoreTips",
-      text: "방금 중앙 타겟을 맞추며 합체 점수를 얻었습니다. 같은 재료를 더 높은 단계로 키울수록 합체 점수도 커집니다.",
+      id: "mergeScorePractice",
+      text: "점수 체험 1: 합체 점수입니다. 중앙의 밥 타겟을 맞추세요. 맞는 순간 점수가 바로 오릅니다.",
+      wait: "merge",
+      setup: "scoreMerge",
+      highlight: ["currentAmmo", "tutorialTarget"],
+      reaction: "합체 점수 직접 올리기",
+    },
+    {
+      id: "mergeScoreResult",
+      text: "방금 오른 점수가 합체 점수입니다. 같은 재료를 더 높은 단계로 키울수록 합체 점수가 더 커집니다.",
       wait: "next",
       highlight: ["currentAmmo"],
       reaction: "합체 점수 확인",
     },
     {
-      id: "deliveryScoreTips",
-      text: "방금 위 배달칸에 넣으며 배달 점수를 얻었습니다. 완성 단계가 높을수록 배달 점수가 더 큽니다.",
+      id: "deliveryScorePractice",
+      text: "점수 체험 2: 배달 점수입니다. 장전된 주먹밥을 위쪽 밥 칸에 넣으세요. 완성품을 넣을 때 점수가 크게 오릅니다.",
+      wait: "deliver",
+      setup: "scoreDelivery",
+      highlight: ["slot:rice"],
+      reaction: "배달 점수 직접 올리기",
+    },
+    {
+      id: "deliveryScoreResult",
+      text: "방금 오른 점수가 배달 점수입니다. 완성 단계가 높을수록 배달 점수가 더 큽니다.",
       wait: "next",
       highlight: ["slot:rice"],
       reaction: "배달 점수 확인",
     },
     {
-      id: "timeScoreTips",
-      text: "배달은 빠를수록 좋습니다. 주문을 오래 끌지 않고 넣으면 남은 시간 보너스가 붙습니다.",
-      wait: "next",
-      highlight: [],
-      reaction: "빠른 배달 보너스",
+      id: "timeScorePractice",
+      text: "점수 체험 3: 빠른 주문 보너스입니다. 이번 주문은 10초 안에 넣으면 +500점입니다. 바로 위 밥 칸에 넣으세요.",
+      wait: "deliver",
+      setup: "scoreFastDelivery",
+      highlight: ["slot:rice"],
+      reaction: "+500 빠른 주문",
+    },
+    {
+      id: "comboScorePractice",
+      text: "점수 체험 4: 콤보 보너스입니다. 콤보가 쌓인 상태로 시작합니다. 중앙 밥 타겟을 맞추면 기본 합체 점수에 콤보 점수가 더 붙습니다.",
+      wait: "merge",
+      setup: "scoreComboMerge",
+      highlight: ["currentAmmo", "tutorialTarget"],
+      reaction: "콤보 점수 직접 보기",
     },
     {
       id: "comboTips",
-      text: "합체와 배달을 끊기지 않게 이어가면 콤보 보너스가 붙습니다. 다른 칸에 오래 머물거나 흐름이 끊기면 콤보가 약해집니다.",
+      text: "고득점은 이렇게 만듭니다. 합체로 키우고, 완성품을 빠르게 배달하고, 그 흐름을 끊지 않아 콤보를 유지하세요.",
       wait: "next",
       highlight: [],
       reaction: "콤보 유지",
@@ -1562,7 +1587,11 @@
     if (!aim) return false;
 
     setCannonAim(Math.atan2(aim.y - CANNON.y, aim.x - CANNON.x), aim.power);
-    fireCannonFromCurrentAim({ allowTutorialAimAssist: false });
+    fireCannonFromCurrentAim({
+      allowTutorialAimAssist: false,
+      lockedAngle: game.cannon.angle,
+      lockedPower: game.cannon.power,
+    });
     return true;
   }
 
@@ -1600,7 +1629,7 @@
     }
 
     return {
-      x: CENTER.x,
+      x: CANNON.x,
       y: CENTER.y,
       power: 1,
     };
@@ -1862,6 +1891,8 @@
         Math.max(game.cannon.power, openingAimTarget.power),
       );
     }
+    const shotAngle = Number.isFinite(options.lockedAngle) ? options.lockedAngle : game.cannon.angle;
+    const shotPower = Number.isFinite(options.lockedPower) ? options.lockedPower : game.cannon.power;
     const tutorialDeliveryShot = Boolean(
       game.tutorialActive &&
         isTutorialActionAllowed("deliver") &&
@@ -1874,7 +1905,7 @@
     );
     const speed =
       CANNON.baseSpeed *
-      (0.76 + game.cannon.power * 0.46) *
+      (0.76 + shotPower * 0.46) *
       getCharacterStats().rotate *
       (tutorialDeliveryShot ? 1.18 : openingDeliveryShot ? 1.14 : 1);
     const feverShotCount = game.feverTimer > 0 ? 2 : 1;
@@ -1886,7 +1917,7 @@
       spawnCannonShot(
         type,
         level,
-        game.cannon.angle + offset,
+        shotAngle + offset,
         speed * (index === 0 ? 1 : 0.96),
         now,
         feverShotCount === 1 ? -1 : index,
@@ -2689,7 +2720,8 @@
   }
 
   function spawnTutorialMergeTarget() {
-    const spec = getIntroOrderSpec() || { type: "rice", level: 1 };
+    const orderTarget = getPrimaryIncompleteOrder();
+    const spec = orderTarget || getIntroOrderSpec() || { type: "rice", level: 1 };
     const targetLevel = Math.max(0, spec.level - 1);
 
     if (
@@ -3158,7 +3190,8 @@
   }
 
   function handleTutorialMergeComplete(merged) {
-    if (!merged || !game.tutorialActive || !isTutorialActionAllowed("merge")) return false;
+    const tutorialMergeActive = isTutorialActionAllowed("merge") || isTutorialActionAllowed("autoFire");
+    if (!merged || !game.tutorialActive || !tutorialMergeActive) return false;
 
     const ammo = createAmmo(merged.type, merged.level, true);
     World.remove(game.world, merged.body);
@@ -3166,7 +3199,9 @@
     loadPreparedAmmo(ammo, `${getFoodName(ammo.type, ammo.level)} 완성!`);
     game.itemMessage = `${getFoodName(ammo.type, ammo.level)} 완성`;
     game.itemMessageTimer = 1.4;
-    completeTutorialAction("merge");
+    if (isTutorialActionAllowed("merge")) {
+      completeTutorialAction("merge");
+    }
     return true;
   }
 
@@ -5961,6 +5996,41 @@
       const ammo = getCurrentCannonAmmo() || createAmmo("rice", 1, true);
       loadPreparedAmmo(ammo, "주먹밥 완성!");
       setNextCannonAmmo(createAmmo("rice", 0, false));
+      return;
+    }
+
+    if (step.setup === "scoreMerge") {
+      setupTutorialOrder("rice", 1);
+      setCannonAmmo(createAmmo("rice", 0, false));
+      setNextCannonAmmo(createAmmo("rice", 0, false));
+      spawnTutorialMergeTarget();
+      return;
+    }
+
+    if (step.setup === "scoreDelivery") {
+      setupTutorialOrder("rice", 1);
+      loadPreparedAmmo(createAmmo("rice", 1, true), "배달 점수 체험");
+      setNextCannonAmmo(createAmmo("rice", 0, false));
+      return;
+    }
+
+    if (step.setup === "scoreFastDelivery") {
+      setupTutorialOrder("rice", 0);
+      game.orderRule = ORDER_RULES.fast;
+      game.orderElapsed = 0;
+      setCannonAmmo(createAmmo("rice", 0, false));
+      setNextCannonAmmo(createAmmo("rice", 0, false));
+      return;
+    }
+
+    if (step.setup === "scoreComboMerge") {
+      setupTutorialOrder("rice", 1);
+      game.combo = Math.max(game.combo, 5);
+      game.maxCombo = Math.max(game.maxCombo, game.combo);
+      setCannonAmmo(createAmmo("rice", 0, false));
+      setNextCannonAmmo(createAmmo("rice", 0, false));
+      spawnTutorialMergeTarget();
+      updateUi(false);
       return;
     }
 
