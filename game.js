@@ -2091,6 +2091,7 @@
   function markPlayerHit(piece, timestamp = performance.now()) {
     if (piece) {
       piece.lastPlayerHitAt = timestamp;
+      piece.lastPlayerHitShotId = piece.shot?.id || 0;
     }
   }
 
@@ -2598,6 +2599,7 @@
       bump: 0,
       lastLaunchAt: 0,
       lastPlayerHitAt: 0,
+      lastPlayerHitShotId: 0,
       deliveryReadyUntil: 0,
       shot: null,
       scored: false,
@@ -2649,13 +2651,12 @@
 
   function isPlayerDrivenMerge(a, b) {
     const now = performance.now();
-    const recentHit = Math.max(a.lastPlayerHitAt || 0, b.lastPlayerHitAt || 0);
-    if (recentHit <= 0 || now - recentHit > PLAYER_MERGE_WINDOW_MS) return false;
-
     const openingGuidedMerge = isIntroMergeStep() && a.type === b.type && a.level === 0;
     if (openingGuidedMerge && (a.shot || b.shot || a.tutorialTarget || b.tutorialTarget)) {
       return true;
     }
+
+    if (!hasFreshShotHit(a, now) && !hasFreshShotHit(b, now)) return false;
 
     const rvx = a.body.velocity.x - b.body.velocity.x;
     const rvy = a.body.velocity.y - b.body.velocity.y;
@@ -2663,6 +2664,15 @@
       ? 0.45
       : MERGE_MIN_RELATIVE_SPEED;
     return Math.hypot(rvx, rvy) >= threshold;
+  }
+
+  function hasFreshShotHit(piece, now = performance.now()) {
+    return Boolean(
+      piece?.shot &&
+        piece.lastPlayerHitShotId === piece.shot.id &&
+        piece.lastPlayerHitAt > 0 &&
+        now - piece.lastPlayerHitAt <= PLAYER_MERGE_WINDOW_MS,
+    );
   }
 
   function getBestShotPiece(...pieces) {
@@ -2837,7 +2847,6 @@
     const merged = spawnIngredient(type, 0, 1, nextLevel, position, velocity);
     merged.bump = 0.26;
     merged.hold = 0;
-    merged.lastPlayerHitAt = Math.max(a.lastPlayerHitAt || 0, b.lastPlayerHitAt || 0);
     if (isAmmoUsefulForCurrentOrder(type, nextLevel)) {
       merged.deliveryReadyUntil = performance.now() + DELIVERY_READY_MS;
       merged.bump = 0.36;
@@ -3881,6 +3890,7 @@
 
   function resetPiece(piece) {
     piece.lastPlayerHitAt = 0;
+    piece.lastPlayerHitShotId = 0;
     piece.settleTime = 0;
     piece.pickupReady = false;
     piece.pickupReadyAt = 0;
