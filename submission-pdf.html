@@ -1,0 +1,383 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>빙글도시락 캐논 제출 PDF</title>
+    <style>
+      @page {
+        size: A4 landscape;
+        margin: 0;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        color: #18312b;
+        background: #f5f1df;
+        font-family: Pretendard, "Apple SD Gothic Neo", "Noto Sans KR", system-ui, sans-serif;
+      }
+
+      .page {
+        width: 297mm;
+        height: 210mm;
+        page-break-after: always;
+        position: relative;
+        overflow: hidden;
+        padding: 18mm 20mm;
+        background:
+          radial-gradient(circle at 82% 18%, rgba(241, 196, 83, 0.28), transparent 28%),
+          radial-gradient(circle at 12% 88%, rgba(44, 154, 160, 0.2), transparent 30%),
+          linear-gradient(135deg, #fffaf0, #eaf5e8);
+      }
+
+      .page:last-child {
+        page-break-after: auto;
+      }
+
+      .eyebrow {
+        display: inline-flex;
+        padding: 6px 10px;
+        border-radius: 999px;
+        color: #ffffff;
+        background: #2f6d5b;
+        font-size: 13px;
+        font-weight: 900;
+        letter-spacing: 0.02em;
+      }
+
+      h1,
+      h2,
+      p {
+        margin: 0;
+      }
+
+      h1 {
+        margin-top: 12px;
+        font-size: 58px;
+        line-height: 0.95;
+        letter-spacing: -0.04em;
+      }
+
+      h2 {
+        margin-top: 12px;
+        font-size: 42px;
+        line-height: 1;
+        letter-spacing: -0.035em;
+      }
+
+      .lead {
+        margin-top: 18px;
+        max-width: 880px;
+        color: #244f45;
+        font-size: 26px;
+        line-height: 1.35;
+        font-weight: 850;
+      }
+
+      .link {
+        margin-top: 18px;
+        display: inline-flex;
+        padding: 9px 13px;
+        border: 2px solid rgba(47, 109, 91, 0.28);
+        border-radius: 10px;
+        color: #1f5145;
+        background: rgba(255, 255, 255, 0.72);
+        font-size: 17px;
+        font-weight: 900;
+      }
+
+      .grid {
+        margin-top: 24px;
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 14px;
+      }
+
+      .grid.two {
+        grid-template-columns: 1fr 1fr;
+      }
+
+      .card {
+        min-height: 92px;
+        padding: 16px;
+        border: 2px solid rgba(24, 49, 43, 0.12);
+        border-radius: 16px;
+        background: rgba(255, 255, 255, 0.74);
+        box-shadow: 0 14px 34px rgba(24, 49, 43, 0.08);
+      }
+
+      .card strong {
+        display: block;
+        color: #18312b;
+        font-size: 23px;
+        line-height: 1.05;
+      }
+
+      .card span,
+      .card p {
+        display: block;
+        margin-top: 8px;
+        color: #62756e;
+        font-size: 16px;
+        line-height: 1.35;
+        font-weight: 750;
+      }
+
+      .loop {
+        margin-top: 28px;
+        display: grid;
+        grid-template-columns: repeat(5, 1fr);
+        gap: 10px;
+        align-items: stretch;
+      }
+
+      .step {
+        padding: 14px 12px;
+        min-height: 138px;
+        border-radius: 18px;
+        background: #ffffff;
+        border: 3px solid rgba(47, 109, 91, 0.18);
+        position: relative;
+      }
+
+      .step b {
+        display: grid;
+        place-items: center;
+        width: 34px;
+        height: 34px;
+        border-radius: 50%;
+        color: #ffffff;
+        background: #2c9aa0;
+        font-size: 18px;
+      }
+
+      .step strong {
+        display: block;
+        margin-top: 14px;
+        font-size: 21px;
+        line-height: 1.08;
+      }
+
+      .step p {
+        margin-top: 8px;
+        color: #62756e;
+        font-size: 14px;
+        font-weight: 750;
+        line-height: 1.3;
+      }
+
+      .hero-art {
+        position: absolute;
+        right: 18mm;
+        bottom: 15mm;
+        width: 270px;
+        height: 270px;
+        border-radius: 36px;
+        background:
+          radial-gradient(circle at 50% 42%, #f8f2de 0 20%, transparent 21%),
+          radial-gradient(circle at 32% 64%, #e85d4f 0 12%, transparent 13%),
+          radial-gradient(circle at 68% 64%, #f2c84f 0 13%, transparent 14%),
+          linear-gradient(135deg, #2f6d5b, #9dd9bf);
+        box-shadow: 0 26px 58px rgba(24, 49, 43, 0.2);
+      }
+
+      .hero-art::after {
+        content: "쏘기 → 키우기 → 배달";
+        position: absolute;
+        left: 22px;
+        right: 22px;
+        bottom: 24px;
+        padding: 10px;
+        border-radius: 14px;
+        text-align: center;
+        color: #18312b;
+        background: #fff8da;
+        font-size: 19px;
+        font-weight: 950;
+      }
+
+      .tag-row {
+        margin-top: 22px;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 9px;
+      }
+
+      .tag {
+        padding: 8px 10px;
+        border-radius: 999px;
+        background: #fff8da;
+        border: 1px solid rgba(155, 116, 35, 0.24);
+        color: #634c16;
+        font-size: 16px;
+        font-weight: 900;
+      }
+
+      .quote {
+        margin-top: 28px;
+        padding: 20px 22px;
+        max-width: 930px;
+        border-left: 8px solid #f1c453;
+        border-radius: 18px;
+        background: rgba(255, 255, 255, 0.75);
+        font-size: 30px;
+        line-height: 1.28;
+        font-weight: 950;
+      }
+
+      .mock {
+        margin-top: 24px;
+        height: 250px;
+        border-radius: 22px;
+        border: 4px solid #1f5145;
+        background:
+          linear-gradient(90deg, transparent 19%, rgba(31, 81, 69, 0.18) 20% 20.5%, transparent 21%),
+          radial-gradient(circle at 50% 58%, rgba(241, 196, 83, 0.78) 0 10%, transparent 11%),
+          radial-gradient(circle at 50% 58%, transparent 0 18%, #f1c453 19% 21%, transparent 22%),
+          linear-gradient(#fff8da 0 24%, #eaf5e8 25% 100%);
+        position: relative;
+      }
+
+      .mock::before {
+        content: "현재 주문 + 지금 할 일 HUD";
+        position: absolute;
+        left: 18px;
+        top: 18px;
+        padding: 9px 12px;
+        border-radius: 12px;
+        background: rgba(255, 255, 255, 0.9);
+        font-weight: 950;
+      }
+
+      .mock::after {
+        content: "중앙 재료 맞춰!";
+        position: absolute;
+        left: 50%;
+        top: 50%;
+        transform: translate(-50%, -160%);
+        padding: 8px 12px;
+        border-radius: 999px;
+        color: #18312b;
+        background: #f1c453;
+        font-weight: 950;
+      }
+
+      .footer {
+        position: absolute;
+        left: 20mm;
+        right: 20mm;
+        bottom: 10mm;
+        display: flex;
+        justify-content: space-between;
+        color: #62756e;
+        font-size: 12px;
+        font-weight: 800;
+      }
+    </style>
+  </head>
+  <body>
+    <section class="page">
+      <span class="eyebrow">60초 웹 미니게임</span>
+      <h1>빙글도시락<br />캐논</h1>
+      <p class="lead">빙글도시락 캐논은 수박게임식 합체를 쌓기 대신 조준 발사로 바꾼 60초 웹 미니게임입니다. 플레이어는 지금 재료를 쏘고, 중앙의 같은 재료를 맞춰 키운 뒤, 완성된 음식을 위쪽 같은 재료 칸에 배달합니다.</p>
+      <p class="link">https://jaeseok614.github.io/bingle-dosirak-rush/</p>
+      <div class="grid">
+        <div class="card"><strong>쏘기</strong><span>누르고 조준한 뒤 손을 떼면 지금 재료가 날아갑니다.</span></div>
+        <div class="card"><strong>키우기</strong><span>중앙의 같은 재료를 맞추면 한 단계 성장합니다.</span></div>
+        <div class="card"><strong>배달</strong><span>완성되면 위쪽 같은 재료 칸에 넣어 주문을 완료합니다.</span></div>
+      </div>
+      <div class="hero-art"></div>
+      <div class="footer"><span>01 Game Overview</span><span>빙글도시락 캐논</span></div>
+    </section>
+
+    <section class="page">
+      <span class="eyebrow">기획 의도</span>
+      <h2>쌓는 합체를<br />조준해서 성장시키기로</h2>
+      <p class="lead">흔한 웹 미니게임의 반복 클릭이나 피하기 대신, 합체 퍼즐의 성장감과 캐논 발사의 손맛, 주문 배달의 목표성을 하나의 짧은 루프로 묶었습니다.</p>
+      <div class="quote">첫 10초 안에 이해되는 규칙: 쏘고, 중앙 재료를 맞춰 키우고, 완성되면 위 칸에 배달한다.</div>
+      <div class="grid">
+        <div class="card"><strong>짧은 규칙</strong><span>60초 안에 바로 이해하고 반복 플레이할 수 있습니다.</span></div>
+        <div class="card"><strong>새로운 해석</strong><span>수박게임식 합체를 쌓기가 아닌 조준 액션으로 바꿨습니다.</span></div>
+        <div class="card"><strong>도시락 테마</strong><span>밥, 계란, 김치, 김, 새우가 직관적인 성장 재료가 됩니다.</span></div>
+      </div>
+      <div class="footer"><span>02 Concept</span><span>문제의식과 기획 의도</span></div>
+    </section>
+
+    <section class="page">
+      <span class="eyebrow">핵심 플레이 루프</span>
+      <h2>쏘기 → 키우기 → 배달</h2>
+      <div class="loop">
+        <div class="step"><b>1</b><strong>지금 재료 발사</strong><p>화면을 눌러 힘을 모으고 방향을 맞춥니다.</p></div>
+        <div class="step"><b>2</b><strong>중앙 재료 맞추기</strong><p>같은 재료가 중앙에 잠깐 나타납니다.</p></div>
+        <div class="step"><b>3</b><strong>한 단계 성장</strong><p>맞추면 지금 재료가 바로 다음 음식이 됩니다.</p></div>
+        <div class="step"><b>4</b><strong>위 칸에 배달</strong><p>완성되면 중앙 타겟 대신 위쪽 칸을 노립니다.</p></div>
+        <div class="step"><b>5</b><strong>콤보와 피버</strong><p>연속 성공하면 피버 자동발사로 이어집니다.</p></div>
+      </div>
+      <div class="mock"></div>
+      <div class="footer"><span>03 Core Loop</span><span>플레이 흐름</span></div>
+    </section>
+
+    <section class="page">
+      <span class="eyebrow">재미 요소</span>
+      <h2>잘 쏜 한 발이<br />하이라이트가 됩니다</h2>
+      <div class="grid two">
+        <div class="card"><strong>직배송</strong><span>정확히 위 칸에 넣는 순간 즉시 보상합니다.</span></div>
+        <div class="card"><strong>빙글배송</strong><span>벽을 튕겨 넣는 물리 기반 배달을 하이라이트로 기록합니다.</span></div>
+        <div class="card"><strong>도시락 도장</strong><span>성공 순간에 도장 연출로 손맛을 줍니다.</span></div>
+        <div class="card"><strong>피버 자동발사</strong><span>연속 성공 후 잠깐 강하게 발사되는 보상 구간입니다.</span></div>
+        <div class="card"><strong>화살표 부스터</strong><span>중반부터 재료 경로를 바꾸는 변수로 등장합니다.</span></div>
+        <div class="card"><strong>마감 10초</strong><span>마지막 순간에 집중도를 높이는 러시 연출입니다.</span></div>
+      </div>
+      <div class="tag-row">
+        <span class="tag">콤보</span><span class="tag">피버</span><span class="tag">도장 연출</span><span class="tag">물리 튕김</span><span class="tag">60초 타임어택</span>
+      </div>
+      <div class="footer"><span>04 Fun Factors</span><span>하이라이트와 점수 설계</span></div>
+    </section>
+
+    <section class="page">
+      <span class="eyebrow">UX와 모바일 대응</span>
+      <h2>한 화면에서<br />지금 할 일만 보이게</h2>
+      <p class="lead">보관함, 회수, 배송 준비 같은 복잡한 조작을 걷어내고 현재 주문과 지금 할 일에 집중하도록 UI를 줄였습니다.</p>
+      <div class="grid">
+        <div class="card"><strong>모바일 HUD</strong><span>현재 주문과 지금 할 일만 상단에 표시합니다.</span></div>
+        <div class="card"><strong>3버튼 조작</strong><span>하단은 다시, 도움, 소리만 남겨 조작 부담을 줄였습니다.</span></div>
+        <div class="card"><strong>코치형 튜토리얼</strong><span>발사, 키우기, 배달을 짧게 체험합니다.</span></div>
+        <div class="card"><strong>강한 타겟 강조</strong><span>중앙 재료와 위쪽 배달칸을 링과 문구로 구분합니다.</span></div>
+        <div class="card"><strong>첫 주문 안정화</strong><span>바로 시작해도 밥 배달, 주먹밥 만들기로 시작합니다.</span></div>
+        <div class="card"><strong>정적 웹앱</strong><span>설치 없이 PC와 모바일 브라우저에서 실행됩니다.</span></div>
+      </div>
+      <div class="footer"><span>05 UX</span><span>모바일과 첫 경험</span></div>
+    </section>
+
+    <section class="page">
+      <span class="eyebrow">완성도와 활용성</span>
+      <h2>배포, 기록, 반복 플레이까지</h2>
+      <div class="grid two">
+        <div class="card"><strong>GitHub Pages 배포</strong><span>정적 파일만으로 바로 배포하고 실행할 수 있습니다.</span></div>
+        <div class="card"><strong>Matter.js 로컬 포함</strong><span>외부 설치 없이 물리 엔진을 함께 제공합니다.</span></div>
+        <div class="card"><strong>로컬 TOP 5</strong><span>플레이 기록을 브라우저에 저장합니다.</span></div>
+        <div class="card"><strong>오늘 챌린지</strong><span>날짜 기반 고정 난수로 같은 날 같은 조건을 제공합니다.</span></div>
+        <div class="card"><strong>결과 복사</strong><span>점수와 하이라이트를 공유 문구로 복사할 수 있습니다.</span></div>
+        <div class="card"><strong>캐릭터/상점/업적</strong><span>반복 플레이 동기를 만드는 확장 요소를 갖췄습니다.</span></div>
+      </div>
+      <div class="footer"><span>06 Completeness</span><span>기술 구현과 제출 완성도</span></div>
+    </section>
+
+    <section class="page">
+      <span class="eyebrow">마무리</span>
+      <h2>왜 수상 후보인가?</h2>
+      <p class="lead">빙글도시락 캐논은 짧은 규칙, 명확한 조작, 귀여운 테마, 모바일 대응, 60초 반복 욕구를 모두 갖춘 제출용 웹 미니게임입니다.</p>
+      <div class="quote">쏘고, 중앙 재료를 맞춰 키우고, 완성되면 위 칸에 배달한다.</div>
+      <div class="grid">
+        <div class="card"><strong>룰이 짧다</strong><span>첫 화면에서 바로 설명되는 3단계 구조입니다.</span></div>
+        <div class="card"><strong>조작이 명확하다</strong><span>누르고 조준하고 떼면 됩니다.</span></div>
+        <div class="card"><strong>반복 욕구가 있다</strong><span>성장, 배달, 콤보, 피버가 60초 안에 빠르게 순환합니다.</span></div>
+      </div>
+      <div class="footer"><span>07 Closing</span><span>빙글도시락 캐논</span></div>
+    </section>
+  </body>
+</html>
