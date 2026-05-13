@@ -115,7 +115,7 @@
       cannon: {
         y: 576,
         dragDistance: 190,
-        baseSpeed: 17.8,
+        baseSpeed: 18.8,
       },
     },
     portrait: {
@@ -135,7 +135,7 @@
       cannon: {
         y: 650,
         dragDistance: 170,
-        baseSpeed: 18.8,
+        baseSpeed: 19.8,
       },
     },
   };
@@ -231,7 +231,7 @@
     },
     {
       id: "directDelivery",
-      text: "먼저 배달을 체험합니다. 화면을 꾹 누르면 힘이 차고, 방향을 맞춘 뒤 손을 떼면 발사됩니다. 밥을 위쪽 밥 칸에 넣으세요.",
+      text: "먼저 배달을 체험합니다. 화면을 꾹 누르면 힘이 차고, 방향을 맞춘 뒤 손을 떼면 발사됩니다. 밥을 위쪽 밥 칸에 배달하세요.",
       wait: "deliver",
       setup: "directDelivery",
       highlight: ["currentAmmo", "slot:rice"],
@@ -254,7 +254,7 @@
     },
     {
       id: "deliverRiceball",
-      text: "중앙 재료가 사라지면 완성입니다. 주먹밥을 위쪽 밥 칸에 넣으세요.",
+      text: "중앙 재료가 사라지면 완성입니다. 주먹밥을 위쪽 밥 칸에 배달하세요.",
       wait: "deliver",
       setup: "preparedDelivery",
       highlight: ["currentAmmo", "slot:rice"],
@@ -610,9 +610,9 @@
       accent: "#74b48a",
       radius: 16,
       shape: "nori",
-      density: 0.0015,
+      density: 0.00125,
       friction: 0.006,
-      frictionAir: 0.025,
+      frictionAir: 0.014,
       restitution: 0.28,
     },
     shrimp: {
@@ -638,11 +638,11 @@
     shrimp: ["새우", "새우튀김", "새우볶음밥", "해물 도시락"],
   };
   const FOOD_SHORT_LABELS = {
-    rice: ["밥", "주먹", "김밥", "특도"],
-    egg: ["계란", "말이", "오믈", "계도"],
-    kimchi: ["김치", "볶김", "김볶", "매도"],
-    nori: ["김", "김말", "김주", "바삭"],
-    shrimp: ["새우", "튀김", "새볶", "해물"],
+    rice: ["밥", "주먹밥", "김밥", "특제"],
+    egg: ["계란", "계란말이", "오믈렛", "계란도시락"],
+    kimchi: ["김치", "볶음김치", "김치볶음밥", "매운도시락"],
+    nori: ["김", "김말이", "김주먹밥", "바삭도시락"],
+    shrimp: ["새우", "새우튀김", "새우볶음밥", "해물도시락"],
   };
   const LEVEL_SCORE = [0, 180, 420, 920];
   let SLOT_WIDTH = 0;
@@ -655,6 +655,7 @@
     { x: 120, y: 126, radius: 25, color: "#e85d4f", edge: "#9c302c" },
   ];
   const BOOSTER_DIRECTIONS = [-Math.PI / 2, -2.35, -0.79, Math.PI, 0, 2.35, 0.79, Math.PI / 2];
+  const MERGE_TARGET_LANES = [-0.62, -0.28, 0, 0.28, 0.62];
   let CANNON = createCannonConfig(LAYOUTS.desktop);
 
   function getLayoutMode() {
@@ -680,7 +681,7 @@
       presetPower: 0.92,
       maxPower: 1,
       dragDistance: layout.cannon?.dragDistance ?? 190,
-      chargeSeconds: 0.95,
+      chargeSeconds: 0.82,
       baseSpeed: layout.cannon?.baseSpeed ?? 17.8,
       reloadSeconds: 0.28,
     };
@@ -878,6 +879,9 @@
     newAchievements: [],
     lastCoinAward: 0,
     lastShareText: "",
+    mergeTargetLaneOrder: [],
+    mergeTargetLaneCursor: 0,
+    mergeTargetLanePhase: -1,
     tutorialActive: false,
     tutorialRun: false,
     tutorialStep: 0,
@@ -1362,6 +1366,9 @@
     game.skillUnlockShown = false;
     game.mergeTargetRespawnAt = 0;
     game.mergeTargetHintAt = 0;
+    game.mergeTargetLaneOrder = [];
+    game.mergeTargetLaneCursor = 0;
+    game.mergeTargetLanePhase = -1;
     game.tutorialRun = tutorialRun;
     game.tutorialActive = shouldRun && (forceTutorial || (!skipTutorial && !isTutorialComplete()));
     game.tutorialStep = 0;
@@ -2489,6 +2496,15 @@
     return FOOD_SHORT_LABELS[type]?.[safeLevel] || getFoodName(type, safeLevel).slice(0, 2);
   }
 
+  function getFoodLabelLines(type, level = 0) {
+    const label = getFoodShortLabel(type, level);
+    if (label.includes(" ")) return label.split(/\s+/).filter(Boolean);
+    if (label.length <= 4) return [label];
+    if (label.endsWith("도시락")) return [label.slice(0, -3), "도시락"];
+    if (label.endsWith("볶음밥")) return [label.slice(0, -3), "볶음밥"];
+    return [label.slice(0, 2), label.slice(2)];
+  }
+
   function getRecipeHint(type, level = 0) {
     const safeLevel = clamp(Math.round(level), 0, MAX_FOOD_LEVEL);
     if (safeLevel <= 0) return "바로 배달";
@@ -2675,6 +2691,63 @@
     return game.pieces.find((piece) => piece.tutorialTarget && !piece.scored && !piece.merging) || null;
   }
 
+  function getMergeTargetLaneOrder(phase) {
+    const laneCount = phase >= 2 ? MERGE_TARGET_LANES.length : 3;
+    const centerIndex = Math.floor(MERGE_TARGET_LANES.length / 2);
+    const allowed =
+      phase <= 0
+        ? [centerIndex]
+        : phase === 1
+          ? [centerIndex - 1, centerIndex, centerIndex + 1]
+          : [...MERGE_TARGET_LANES.keys()];
+    const order = [...allowed];
+
+    for (let i = order.length - 1; i > 0; i -= 1) {
+      const j = Math.floor(game.orderRng() * (i + 1));
+      [order[i], order[j]] = [order[j], order[i]];
+    }
+
+    const previous = game.mergeTargetLaneOrder[game.mergeTargetLaneOrder.length - 1];
+    if (order.length > 1 && order[0] === previous) {
+      order.push(order.shift());
+    }
+
+    return order.slice(0, laneCount);
+  }
+
+  function pickMergeTargetLane() {
+    const phase = getRushPhase();
+    if (
+      game.mergeTargetLanePhase !== phase ||
+      !game.mergeTargetLaneOrder.length ||
+      game.mergeTargetLaneCursor >= game.mergeTargetLaneOrder.length
+    ) {
+      game.mergeTargetLaneOrder = getMergeTargetLaneOrder(phase);
+      game.mergeTargetLaneCursor = 0;
+      game.mergeTargetLanePhase = phase;
+    }
+
+    const laneIndex = game.mergeTargetLaneOrder[game.mergeTargetLaneCursor] ?? 2;
+    game.mergeTargetLaneCursor += 1;
+    return MERGE_TARGET_LANES[laneIndex] ?? 0;
+  }
+
+  function getMergeTargetSpawnPosition(slot) {
+    const phase = getRushPhase();
+    const lane = pickMergeTargetLane();
+    const laneRange = Math.max(150, (ARENA.right - ARENA.left) * 0.38);
+    const slotBias = slot ? (getSlotCenterX(slot) - CENTER.x) * (phase >= 2 ? 0.24 : 0.14) : 0;
+    const xJitter = phase >= 2 ? randomRange(-14, 14, game.orderRng) : randomRange(-8, 8, game.orderRng);
+    const ySteps = phase >= 2 ? [0.42, 0.5, 0.58] : phase === 1 ? [0.47, 0.56] : [0.52];
+    const yFactor = ySteps[Math.floor(game.orderRng() * ySteps.length)] || 0.52;
+    const targetY = CANNON.y + ((slot ? ARENA.slotBottom + 20 : CENTER.y) - CANNON.y) * yFactor;
+
+    return {
+      x: clamp(CENTER.x + lane * laneRange + slotBias + xJitter, ARENA.left + 92, ARENA.right - 92),
+      y: clamp(targetY + randomRange(-10, 16, game.orderRng), ARENA.slotBottom + 58, CANNON.y - 120),
+    };
+  }
+
   function ensureMergeTargetForCurrentAmmo(force = false) {
     const existing = getActiveMergeTarget();
     if (existing && !force) return;
@@ -2687,24 +2760,14 @@
     if (!target || current.level >= target.level) return;
 
     const slot = SLOTS.find((candidate) => candidate.type === current.type);
-    const difficultySpread = 34 + getRushPhase() * 28 + Math.min(42, game.completed * 3);
-    const laneBias = slot ? (getSlotCenterX(slot) - CANNON.x) * randomRange(0.36, 0.7, game.orderRng) : 0;
-    const targetX = CANNON.x + laneBias + randomRange(-difficultySpread, difficultySpread, game.orderRng);
-    const targetY =
-      CANNON.y +
-      ((slot ? ARENA.slotBottom + 20 : CENTER.y) - CANNON.y) *
-        randomRange(0.42, 0.62, game.orderRng) +
-      randomRange(-28, 34, game.orderRng);
+    const spawnPosition = getMergeTargetSpawnPosition(slot);
 
     const piece = spawnIngredient(
       current.type,
       0,
       1,
       current.level,
-      {
-        x: clamp(targetX, ARENA.left + 92, ARENA.right - 92),
-        y: clamp(targetY, ARENA.slotBottom + 58, CANNON.y - 120),
-      },
+      spawnPosition,
       {
         x: 0,
         y: 0,
@@ -5678,7 +5741,7 @@
 
   function getOrderHintText() {
     if (!game.started) {
-      return "밥 칸에 넣으세요.";
+      return "밥 칸에 배달하세요.";
     }
 
     const tutorialMessage = getTutorialMessage();
@@ -6824,12 +6887,18 @@
     ctx.fillStyle = piece.level > 0 ? "#ffffff" : food.accent;
     ctx.strokeStyle = piece.level > 0 ? food.edge : "rgba(255, 255, 255, 0.82)";
     ctx.lineWidth = piece.level > 0 ? 4 : 3;
-    ctx.font = `950 ${Math.max(11, Math.min(16, radius * 0.62))}px system-ui, sans-serif`;
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
-    const label = getFoodShortLabel(piece.type, piece.level);
-    ctx.strokeText(label, 0, 0);
-    ctx.fillText(label, 0, 0);
+    const labelLines = getFoodLabelLines(piece.type, piece.level);
+    const fontSize = Math.max(9, Math.min(labelLines.length > 1 ? 12 : 15, radius * (labelLines.length > 1 ? 0.42 : 0.5)));
+    ctx.font = `950 ${fontSize}px system-ui, sans-serif`;
+    const lineHeight = fontSize * 1.05;
+    const startY = -((labelLines.length - 1) * lineHeight) / 2;
+    labelLines.forEach((label, index) => {
+      const y = startY + index * lineHeight;
+      ctx.strokeText(label, 0, y);
+      ctx.fillText(label, 0, y);
+    });
 
     ctx.shadowColor = "transparent";
     if (piece.hold > 0) {
