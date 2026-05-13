@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>빙글도시락 캐논</title>
     <link rel="icon" href="favicon.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="style.css?v=20260513-shot-tuning" />
+    <link rel="stylesheet" href="style.css?v=20260513-mobile-polish" />
   </head>
   <body>
     <main class="app-shell" aria-label="빙글도시락 캐논">
@@ -131,12 +131,12 @@
                 <div class="guide-step">
                   <span class="guide-icon guide-item" aria-hidden="true">▣</span>
                   <strong>위 칸에 배달</strong>
-                  <p>중앙 재료가 사라지면 완성입니다. 위쪽 같은 재료 칸에 넣으세요.</p>
+                  <p>중앙 재료가 사라지면 완성입니다. 위쪽 같은 재료 칸에 배달하세요.</p>
                 </div>
                 <div class="guide-step">
                   <span class="guide-icon guide-fever" aria-hidden="true">✦</span>
                   <strong>콤보와 피버</strong>
-                  <p>합체와 배달을 이어가면 콤보가 오르고, 콤보 x8 또는 도시락 3개 연속이면 피버로 풀파워 자동발사합니다.</p>
+                  <p>연속 성공하면 피버가 켜지고, 잠깐 자동으로 강하게 발사됩니다.</p>
                 </div>
               </div>
               <p class="guide-tip">처음이면 연습 추천. 아무 곳이나 눌러 넘기고, 발사와 배달을 직접 해봅니다.</p>
@@ -279,14 +279,14 @@
         </section>
 
         <aside class="action-panel" aria-label="조작">
-          <button id="restartButton" class="secondary-button" type="button">재시작</button>
-          <button id="guideButton" class="secondary-button guide-button" type="button">가이드</button>
-          <button id="soundButton" class="secondary-button sound-button" type="button">사운드 ON</button>
+          <button id="restartButton" class="secondary-button" type="button" data-mobile-label="다시">재시작</button>
+          <button id="guideButton" class="secondary-button guide-button" type="button" data-mobile-label="도움">가이드</button>
+          <button id="soundButton" class="secondary-button sound-button" type="button" data-mobile-label="소리">사운드 ON</button>
         </aside>
       </section>
     </main>
 
     <script src="vendor/matter.min.js"></script>
-    <script src="game.js?v=20260513-shot-tuning"></script>
+    <script src="game.js?v=20260513-mobile-polish"></script>
   </body>
 </html>

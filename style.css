@@ -232,6 +232,11 @@ h1 {
   border-color: rgba(155, 116, 35, 0.22);
 }
 
+.mode-badge,
+.meter-block {
+  display: none;
+}
+
 .order-rule[hidden] {
   display: none;
 }
@@ -399,6 +404,10 @@ h1 {
   gap: 8px;
 }
 
+.order-panel .meter-block {
+  display: none;
+}
+
 .meter-track {
   height: 12px;
   overflow: hidden;
@@ -502,183 +511,6 @@ h1 {
 .mobile-order-hud.is-paused {
   border-color: rgba(232, 93, 79, 0.32);
   box-shadow: 0 12px 26px rgba(232, 93, 79, 0.18);
-}
-
-.mobile-hud-meta {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-
-.mobile-hud-meta span {
-  padding: 4px 7px;
-  border-radius: 999px;
-  color: var(--leaf-dark);
-  background: #eef8f1;
-  border: 1px solid rgba(47, 109, 91, 0.14);
-  font-size: 0.72rem;
-  line-height: 1;
-}
-
-.mobile-ammo-dock {
-  display: none;
-}
-
-.ammo-status {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 8px;
-}
-
-.ammo-status > div,
-.mobile-delivery-button,
-.mobile-stash-buttons button,
-.mobile-merge-button {
-  min-width: 0;
-  border-radius: 8px;
-  border: 1px solid rgba(47, 109, 91, 0.16);
-  background: #f7fbf2;
-}
-
-.ammo-status > div {
-  padding: 8px;
-}
-
-.ammo-status > div.is-active-turn {
-  border-color: rgba(241, 196, 83, 0.9);
-  background: linear-gradient(135deg, #fff1b6, #fff9dd);
-  box-shadow: 0 0 0 3px rgba(241, 196, 83, 0.22);
-}
-
-.ammo-status > div.is-dimmed {
-  opacity: 0.56;
-}
-
-.ammo-status span,
-.stash-title {
-  display: block;
-  color: var(--muted);
-  font-size: 0.68rem;
-  font-weight: 900;
-}
-
-.ammo-status strong {
-  display: block;
-  margin-top: 2px;
-  min-width: 0;
-  overflow: hidden;
-  color: var(--ink);
-  font-size: 0.95rem;
-  font-weight: 950;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.mobile-delivery-button {
-  min-height: 48px;
-  color: var(--leaf-dark);
-  background: #fff1b6;
-  border-color: rgba(241, 196, 83, 0.88);
-  box-shadow: 0 0 0 3px rgba(241, 196, 83, 0.2);
-  font-size: 0.86rem;
-  font-weight: 950;
-  animation: stashPulse 680ms ease-in-out infinite alternate;
-}
-
-.mobile-delivery-button.is-active-turn {
-  color: #18312b;
-  background: linear-gradient(135deg, #f1c453, #fff1b6);
-  border-color: rgba(241, 196, 83, 1);
-  box-shadow:
-    0 0 0 4px rgba(241, 196, 83, 0.24),
-    0 10px 22px rgba(155, 116, 35, 0.22);
-  transform: translateY(-1px);
-}
-
-.mobile-delivery-button.is-tutorial-target {
-  outline: 4px solid #f1c453;
-  box-shadow:
-    0 0 0 5px rgba(241, 196, 83, 0.28),
-    0 0 24px rgba(241, 196, 83, 0.65),
-    0 0 0 3px rgba(241, 196, 83, 0.2);
-  animation: tutorialTargetPulse 720ms ease-in-out infinite alternate;
-}
-
-@keyframes tutorialTargetPulse {
-  from {
-    transform: translateY(0) scale(1);
-  }
-
-  to {
-    transform: translateY(-2px) scale(1.025);
-  }
-}
-
-.mobile-delivery-button[hidden] {
-  display: none;
-}
-
-.mobile-stash-buttons {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 7px;
-}
-
-.mobile-ammo-dock.is-stash-hidden .stash-title,
-.mobile-ammo-dock.is-stash-hidden .mobile-stash-buttons,
-.mobile-ammo-dock.is-stash-hidden .mobile-merge-button {
-  display: none;
-}
-
-.mobile-ammo-dock.is-delivery-turn {
-  border-color: rgba(241, 196, 83, 0.48);
-  box-shadow: 0 -8px 22px rgba(241, 196, 83, 0.18);
-}
-
-.mobile-ammo-dock.is-current-turn {
-  border-color: rgba(44, 154, 160, 0.34);
-  box-shadow: 0 -8px 22px rgba(44, 154, 160, 0.14);
-}
-
-.mobile-stash-buttons button {
-  min-height: 58px;
-  padding: 6px 4px;
-  color: var(--ink);
-  background: #fffaf0;
-  font-size: 0.72rem;
-  font-weight: 950;
-  line-height: 1.12;
-  white-space: pre-line;
-}
-
-.mobile-stash-buttons button.is-needed {
-  background: #fff1b6;
-  border-color: rgba(241, 196, 83, 0.88);
-  box-shadow: 0 0 0 3px rgba(241, 196, 83, 0.22);
-  animation: stashPulse 680ms ease-in-out infinite alternate;
-}
-
-.mobile-merge-button {
-  min-height: 38px;
-  color: #ffffff;
-  background: var(--teal);
-  font-size: 0.78rem;
-  font-weight: 950;
-}
-
-.mobile-merge-button:disabled {
-  color: var(--muted);
-  background: #eef1ea;
-}
-
-@keyframes stashPulse {
-  from {
-    transform: translateY(0);
-  }
-
-  to {
-    transform: translateY(-2px);
-  }
 }
 
 .character-hud {
@@ -846,11 +678,6 @@ h1 {
 
 .tutorial-coach.is-waiting-action {
   pointer-events: none;
-}
-
-.tutorial-coach.is-stash-action {
-  top: 18px;
-  bottom: auto;
 }
 
 body.is-tutorial-coach .action-panel {
@@ -1176,10 +1003,6 @@ body.is-debug .action-panel .balance-button {
   font-size: 0.72rem;
   line-height: 1.24;
   font-weight: 700;
-}
-
-.mobile-ammo-dock {
-  display: none !important;
 }
 
 .guide-tip {
@@ -1822,7 +1645,7 @@ body.is-debug .action-panel .balance-button {
   .app-shell {
     width: 100vw;
     min-height: 100svh;
-    padding: 5px 0 calc(150px + env(safe-area-inset-bottom));
+    padding: 5px 0 calc(74px + env(safe-area-inset-bottom));
     gap: 4px;
   }
 
@@ -1915,10 +1738,6 @@ body.is-debug .action-panel .balance-button {
     white-space: normal;
   }
 
-  .mobile-hud-meta {
-    display: none;
-  }
-
   .tutorial-coach {
     bottom: 8px;
     width: calc(100% - 14px);
@@ -1927,13 +1746,6 @@ body.is-debug .action-panel .balance-button {
     gap: 8px;
     padding: 9px;
     border-radius: 10px;
-  }
-
-  .tutorial-coach.is-stash-action {
-    position: fixed;
-    top: calc(74px + env(safe-area-inset-top));
-    bottom: auto;
-    z-index: 18;
   }
 
   .tutorial-coach-avatar {
@@ -1958,56 +1770,6 @@ body.is-debug .action-panel .balance-button {
     font-size: 1rem;
   }
 
-  .mobile-ammo-dock {
-    position: fixed;
-    left: 7px;
-    right: 7px;
-    bottom: calc(52px + env(safe-area-inset-bottom));
-    z-index: 19;
-    display: grid;
-    gap: 5px;
-    padding: 6px;
-    border-radius: 13px;
-    background: rgba(255, 255, 255, 0.94);
-    border: 1px solid rgba(24, 49, 43, 0.12);
-    box-shadow: 0 -6px 18px rgba(24, 49, 43, 0.13);
-  }
-
-  .ammo-status {
-    display: none;
-  }
-
-  .stash-title {
-    font-size: 0.62rem;
-    line-height: 1;
-  }
-
-  .mobile-delivery-button {
-    min-height: 38px;
-    font-size: 0.72rem;
-  }
-
-  .mobile-stash-buttons {
-    gap: 5px;
-  }
-
-  .mobile-stash-buttons button {
-    min-height: 42px;
-    padding: 4px 2px;
-    border-radius: 10px;
-    font-size: 0.62rem;
-    line-height: 1.05;
-  }
-
-  .mobile-merge-button {
-    min-height: 30px;
-    font-size: 0.68rem;
-  }
-
-  .mobile-merge-button:disabled {
-    display: none;
-  }
-
   .action-panel {
     position: fixed;
     left: 7px;
@@ -2016,7 +1778,7 @@ body.is-debug .action-panel .balance-button {
     z-index: 20;
     order: 3;
     display: grid;
-    grid-template-columns: 1.15fr 1fr 1fr 1fr;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 5px;
     padding: 5px;
     border-radius: 12px;
@@ -2029,8 +1791,13 @@ body.is-debug .action-panel .balance-button {
     min-height: 38px;
     padding: 4px 3px;
     border-radius: 9px;
-    font-size: 0.68rem;
+    font-size: 0;
     font-weight: 950;
+  }
+
+  .action-panel .secondary-button::after {
+    content: attr(data-mobile-label);
+    font-size: 0.72rem;
   }
 
   .skill-button {
@@ -2161,22 +1928,8 @@ body.is-debug .action-panel .balance-button {
   }
 
   #gameCanvas {
-    width: min(100vw, calc((100svh - 185px) * 720 / 820));
-    max-height: calc(100svh - 185px);
-  }
-
-  .mobile-ammo-dock {
-    gap: 4px;
-    padding: 5px;
-  }
-
-  .stash-title {
-    display: none;
-  }
-
-  .mobile-stash-buttons button {
-    min-height: 38px;
-    font-size: 0.58rem;
+    width: min(100vw, calc((100svh - 112px) * 720 / 820));
+    max-height: calc(100svh - 112px);
   }
 
   .guide-box {
