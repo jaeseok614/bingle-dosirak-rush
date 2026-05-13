@@ -1047,6 +1047,7 @@ body.is-debug .action-panel .balance-button {
 
 .guide-box {
   width: min(840px, 100%);
+  padding: 18px;
 }
 
 .result-box {
@@ -1075,36 +1076,36 @@ body.is-debug .action-panel .balance-button {
 .select-box h2,
 .achievement-box h2,
 .balance-box h2 {
-  margin: 5px 0 14px;
-  font-size: 1.86rem;
+  margin: 4px 0 10px;
+  font-size: 1.72rem;
   letter-spacing: 0;
 }
 
 .guide-steps {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 10px;
-  margin-bottom: 12px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  margin-bottom: 10px;
 }
 
 .guide-step {
   min-width: 0;
-  padding: 10px;
+  padding: 8px;
   border: 1px solid rgba(24, 49, 43, 0.12);
   border-radius: 8px;
   background: #f5f8f0;
 }
 
 .guide-icon {
-  width: 34px;
-  height: 34px;
-  margin-bottom: 8px;
+  width: 28px;
+  height: 28px;
+  margin-bottom: 5px;
   border-radius: 50%;
   display: grid;
   place-items: center;
   color: var(--paper);
   background: var(--coral);
-  font-size: 1.6rem;
+  font-size: 1.25rem;
   font-weight: 950;
   line-height: 1;
 }
@@ -1159,22 +1160,22 @@ body.is-debug .action-panel .balance-button {
 
 .guide-step strong {
   display: block;
-  margin-bottom: 5px;
-  font-size: 0.9rem;
+  margin-bottom: 3px;
+  font-size: 0.84rem;
 }
 
 .guide-step p,
 .guide-tip {
   margin: 0;
   color: var(--muted);
-  font-size: 0.8rem;
-  line-height: 1.35;
+  font-size: 0.72rem;
+  line-height: 1.24;
   font-weight: 700;
 }
 
 .guide-tip {
-  margin-bottom: 14px;
-  padding: 10px;
+  margin-bottom: 10px;
+  padding: 8px;
   border-radius: 8px;
   background: #fff8da;
   color: #634c16;
@@ -2038,17 +2039,17 @@ body.is-debug .action-panel .balance-button {
   }
 
   .guide-steps {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .guide-box {
-    padding: 14px;
+    padding: 12px;
     overflow: auto;
   }
 
   .guide-box h2 {
-    margin-bottom: 10px;
-    font-size: 1.5rem;
+    margin-bottom: 8px;
+    font-size: 1.28rem;
   }
 
   .guide-steps {
@@ -2058,27 +2059,27 @@ body.is-debug .action-panel .balance-button {
 
   .guide-step {
     display: grid;
-    grid-template-columns: 30px minmax(0, 1fr);
-    column-gap: 8px;
+    grid-template-columns: 24px minmax(0, 1fr);
+    column-gap: 6px;
     align-items: start;
-    padding: 8px;
+    padding: 7px;
   }
 
   .guide-icon {
-    width: 30px;
-    height: 30px;
+    width: 24px;
+    height: 24px;
     margin: 0;
-    font-size: 1.15rem;
+    font-size: 0.98rem;
   }
 
   .guide-step strong {
     margin-bottom: 2px;
-    font-size: 0.84rem;
+    font-size: 0.76rem;
   }
 
   .guide-step p {
-    font-size: 0.72rem;
-    line-height: 1.25;
+    font-size: 0.64rem;
+    line-height: 1.16;
   }
 
   .guide-tip {
@@ -2090,9 +2091,9 @@ body.is-debug .action-panel .balance-button {
 
   .guide-actions .primary-button,
   .guide-actions .secondary-button {
-    min-height: 42px;
-    padding: 8px;
-    font-size: 0.84rem;
+    min-height: 38px;
+    padding: 7px;
+    font-size: 0.8rem;
   }
 
   .result-actions {
@@ -2170,12 +2171,12 @@ body.is-debug .action-panel .balance-button {
   }
 
   .guide-box {
-    padding: 12px;
+    padding: 10px;
   }
 
   .guide-box h2 {
-    margin-bottom: 8px;
-    font-size: 1.28rem;
+    margin-bottom: 6px;
+    font-size: 1.12rem;
   }
 
   .guide-step p,
@@ -2185,6 +2186,7 @@ body.is-debug .action-panel .balance-button {
 
   .guide-step {
     align-items: center;
+    padding: 6px;
   }
 
   .guide-step strong {
