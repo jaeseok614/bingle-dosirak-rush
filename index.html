@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>빙글도시락 캐논</title>
     <link rel="icon" href="favicon.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="style.css?v=20260513-guided-growth" />
+    <link rel="stylesheet" href="style.css?v=20260513-auto-fire" />
   </head>
   <body>
     <main class="app-shell" aria-label="빙글도시락 캐논">
@@ -133,7 +133,7 @@
                 </div>
                 <div class="guide-step">
                   <span class="guide-icon guide-item" aria-hidden="true">▣</span>
-                  <strong>배송 준비</strong>
+                  <strong>완성 후 배달</strong>
                   <p>완성 단계가 되면 중앙 타겟이 사라지고 위쪽 같은 색 배달칸에 넣으면 됩니다.</p>
                 </div>
                 <div class="guide-step">
@@ -286,7 +286,7 @@
           </div>
         </section>
 
-        <section id="mobileAmmoDock" class="mobile-ammo-dock" aria-label="모바일 장전대">
+        <section id="mobileAmmoDock" class="mobile-ammo-dock" aria-label="모바일 장전대" hidden>
           <div class="ammo-status">
             <div id="mobileCurrentPanel">
               <span>현재탄</span>
@@ -309,7 +309,7 @@
         </section>
 
         <aside class="action-panel" aria-label="조작">
-          <button id="skillButton" class="secondary-button skill-button" type="button">집기!</button>
+          <button id="skillButton" class="secondary-button skill-button" type="button">자동발사</button>
           <button id="restartButton" class="secondary-button" type="button">재시작</button>
           <button id="guideButton" class="secondary-button guide-button" type="button">가이드</button>
           <button id="soundButton" class="secondary-button sound-button" type="button">사운드 ON</button>
@@ -318,6 +318,6 @@
     </main>
 
     <script src="vendor/matter.min.js"></script>
-    <script src="game.js?v=20260513-guided-growth"></script>
+    <script src="game.js?v=20260513-auto-fire"></script>
   </body>
 </html>

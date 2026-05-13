@@ -196,6 +196,9 @@
   const SHOT_DIRECT_DELIVERY_MS = 2000;
   const SHOT_DIRECT_MERGE_MS = 2600;
   const SHOT_CHAIN_TARGET = 3;
+  const MERGE_TARGET_VISIBLE_MS = 1650;
+  const MERGE_TARGET_RESPAWN_MS = 620;
+  const MISSED_SHOT_CLEANUP_MS = 2400;
   const AMMO_STASH_SIZE = 4;
   let PICKUP_ZONE_TOP = ARENA.bottom - 86;
   const PICKUP_SETTLE_SECONDS = 0.52;
@@ -343,7 +346,7 @@
       cost: 70,
       color: "#e85d4f",
       image: "assets/characters/sprinter.png",
-      description: "발사 속도 +15%, 집기 쿨타임 -15%",
+      description: "발사 속도 +15%, 자동발사 쿨타임 -15%",
       stats: {
         rotate: 1.15,
         score: 1,
@@ -1342,6 +1345,7 @@
     game.lastShareText = "";
     game.ammoHintShown = false;
     game.skillUnlockShown = false;
+    game.mergeTargetRespawnAt = 0;
     game.tutorialRun = tutorialRun;
     game.tutorialActive = shouldRun && (forceTutorial || (!skipTutorial && !isTutorialComplete()));
     game.tutorialStep = 0;
@@ -1438,32 +1442,59 @@
     if (!game.running || game.skillCooldown > 0 || game.tutorialActive || !shouldUnlockSkill()) return;
 
     unlockAudio();
+    if (!autoFireCannon()) return;
 
-    const targets = findPickupSkillTargets(getPickupSkillLimit());
-    if (!targets.length) {
-      game.itemMessage = "회수 없음";
-      game.itemMessageTimer = 1;
-      showFloatingText("회수할 재료 없음", CENTER.x, CANNON.y - 112, "#6b7974", 22);
-      setCharacterReaction("회수할 재료 없음", "idle", 1.1);
-      updateUi(false);
-      return;
-    }
-
-    markFirstInput();
-    game.skillCooldown = SKILL_COOLDOWN * getCharacterStats().skillCooldown;
-
-    for (const piece of targets) {
-      const { x, y } = piece.body.position;
-      collectPieceToAmmo(piece, "skill");
-      burst(x, y, "#f1c453", 12);
-    }
-
-    game.itemMessage = targets.length > 1 ? "집기 x2!" : "집기!";
-    game.itemMessageTimer = 1.2;
-    setCharacterReaction(targets.length > 1 ? "두 개 집었어!" : "집었어!", "skill", 1.2);
-    playSound("item");
-    vibrate(targets.length > 1 ? [8, 24, 8] : 16);
+    game.skillCooldown = Math.max(0.45, SKILL_COOLDOWN * 0.28 * getCharacterStats().skillCooldown);
+    game.itemMessage = "자동발사!";
+    game.itemMessageTimer = 1.1;
+    setCharacterReaction("자동발사!", "skill", 1.1);
     updateUi(false);
+  }
+
+  function autoFireCannon() {
+    if (!canUseCannon()) return false;
+
+    const aim = getAutoFireAimPoint();
+    if (!aim) return false;
+
+    setCannonAim(Math.atan2(aim.y - CANNON.y, aim.x - CANNON.x), aim.power);
+    fireCannonFromCurrentAim();
+    return true;
+  }
+
+  function getAutoFireAimPoint() {
+    const current = getCurrentCannonAmmo();
+    if (!current) return null;
+
+    if (isDeliverableAmmoForCurrentOrder(current.type, current.level)) {
+      const slot = SLOTS.find((candidate) => candidate.type === current.type);
+      if (!slot) return null;
+      return {
+        x: getSlotCenterX(slot),
+        y: ARENA.slotBottom + 28,
+        power: 1,
+      };
+    }
+
+    if (isGrowthAmmoForCurrentOrder(current.type, current.level)) {
+      let target = getActiveMergeTarget();
+      if (!target) {
+        ensureMergeTargetForCurrentAmmo(true);
+        target = getActiveMergeTarget();
+      }
+      if (!target) return null;
+      return {
+        x: target.body.position.x,
+        y: target.body.position.y,
+        power: 0.9,
+      };
+    }
+
+    return {
+      x: CENTER.x,
+      y: CENTER.y,
+      power: 0.82,
+    };
   }
 
   function getPickupSkillCandidates() {
@@ -2064,6 +2095,7 @@
   }
 
   function collectPickupPieceAtPoint(point) {
+    if (!game.tutorialActive) return false;
     if (game.cannon.charging) return false;
     if (!game.started || game.timeLeft <= 0 || isBlockingOverlayOpen() || !ui.guideOverlay.hidden) return false;
 
@@ -2350,10 +2382,10 @@
     syncBoardForCurrentAmmo();
     if (game.started && getIntroStep() === "skillUnlock" && !game.skillUnlockShown) {
       game.skillUnlockShown = true;
-      game.itemMessage = "집기 해금!";
+      game.itemMessage = "자동발사 해금!";
       game.itemMessageTimer = 1.8;
-      showFloatingText("집기 해금!", CENTER.x, CANNON.y - 118, "#f1c453", 32);
-      setCharacterReaction("집기도 쓸 수 있어요", "happy", 1.6);
+      showFloatingText("자동발사 해금!", CENTER.x, CANNON.y - 118, "#f1c453", 32);
+      setCharacterReaction("자동발사를 쓸 수 있어요", "happy", 1.6);
     }
     updateUi(true);
   }
@@ -2578,7 +2610,7 @@
     if (!game.started || game.tutorialActive || !game.world || game.nextOrderDelay > 0) return;
 
     cleanupBlockingIngredients();
-    ensureMergeTargetForCurrentAmmo();
+    ensureMergeTargetForCurrentAmmo(false);
   }
 
   function clearMergeTargets(includeTutorial = false) {
@@ -2609,8 +2641,14 @@
     game.pieces = game.pieces.filter((piece) => !blockers.includes(piece));
   }
 
-  function ensureMergeTargetForCurrentAmmo() {
-    clearMergeTargets();
+  function getActiveMergeTarget() {
+    return game.pieces.find((piece) => piece.mergeTarget && !piece.scored && !piece.merging) || null;
+  }
+
+  function ensureMergeTargetForCurrentAmmo(force = false) {
+    const existing = getActiveMergeTarget();
+    if (existing && !force) return;
+    if (existing) clearMergeTargets();
 
     const current = getCurrentCannonAmmo();
     if (!current) return;
@@ -2618,14 +2656,18 @@
     const target = getPrimaryOrderTargetForType(current.type);
     if (!target || current.level >= target.level) return;
 
+    const slot = SLOTS.find((candidate) => candidate.type === current.type);
+    const targetX = slot ? CANNON.x + (getSlotCenterX(slot) - CANNON.x) * 0.55 : CENTER.x;
+    const targetY = CANNON.y + ((slot ? ARENA.slotBottom + 20 : CENTER.y) - CANNON.y) * 0.5;
+
     const piece = spawnIngredient(
       current.type,
       0,
       1,
       current.level,
       {
-        x: CENTER.x,
-        y: CENTER.y + 8,
+        x: clamp(targetX, ARENA.left + 92, ARENA.right - 92),
+        y: clamp(targetY, ARENA.slotBottom + 58, CANNON.y - 120),
       },
       {
         x: 0,
@@ -2633,6 +2675,8 @@
       },
     );
     piece.mergeTarget = true;
+    piece.mergeTargetExpiresAt = performance.now() + MERGE_TARGET_VISIBLE_MS;
+    piece.bump = 0.34;
     Body.setStatic(piece.body, true);
     Body.setVelocity(piece.body, { x: 0, y: 0 });
     Body.setAngularVelocity(piece.body, 0);
@@ -2675,6 +2719,7 @@
       deliveryReadyUntil: 0,
       shot: null,
       mergeTarget: false,
+      mergeTargetExpiresAt: 0,
       scored: false,
       merging: false,
       bornAt: performance.now(),
@@ -3398,7 +3443,7 @@
     processMerges();
     containEscapedPieces();
     updateScoring(dt);
-    updatePickupZone(dt);
+    updateGuidedBoard(dt);
     updateIngredientSpawns(dt);
     updateItemTimers(dt);
     updateFever(dt);
@@ -3475,6 +3520,11 @@
         body.position.y < ARENA.top - 170 ||
         body.position.y > ARENA.bottom + 150
       ) {
+        if (!game.tutorialActive) {
+          World.remove(game.world, body);
+          game.pieces = game.pieces.filter((candidate) => candidate !== piece);
+          continue;
+        }
         resetPiece(piece);
         game.itemMessage = "재투입";
         game.itemMessageTimer = 0.8;
@@ -3573,6 +3623,50 @@
         markPiecePickupReady(piece);
       }
     }
+  }
+
+  function updateGuidedBoard(dt) {
+    if (game.tutorialActive) {
+      updatePickupZone(dt);
+      return;
+    }
+
+    cleanupMissedShots();
+    cleanupBlockingIngredients();
+
+    const target = getActiveMergeTarget();
+    if (target) {
+      target.bump = Math.max(target.bump, 0.12);
+      if (performance.now() >= target.mergeTargetExpiresAt) {
+        clearMergeTargets();
+        game.mergeTargetRespawnAt = performance.now() + MERGE_TARGET_RESPAWN_MS;
+      }
+      return;
+    }
+
+    if (!game.mergeTargetRespawnAt || performance.now() >= game.mergeTargetRespawnAt) {
+      ensureMergeTargetForCurrentAmmo(false);
+      game.mergeTargetRespawnAt = 0;
+    }
+  }
+
+  function cleanupMissedShots() {
+    const now = performance.now();
+    const missed = game.pieces.filter((piece) => {
+      return (
+        piece.shot &&
+        !piece.scored &&
+        !piece.merging &&
+        now - piece.shot.firedAt > MISSED_SHOT_CLEANUP_MS
+      );
+    });
+    if (!missed.length) return;
+
+    World.remove(
+      game.world,
+      missed.map((piece) => piece.body),
+    );
+    game.pieces = game.pieces.filter((piece) => !missed.includes(piece));
   }
 
   function getDeliveryHoldSeconds() {
@@ -3740,7 +3834,7 @@
     }
 
     const rect = getDeliveryReadyRect();
-    showFloatingText("노란 배송 준비 탭!", rect.x + rect.width / 2, rect.y - 12, "#f1c453", 26);
+    showFloatingText("자동 장전 준비", rect.x + rect.width / 2, rect.y - 12, "#f1c453", 26);
     setCharacterReaction("배송 준비를 눌러 장전", "happy", 1.6);
   }
 
@@ -5296,7 +5390,7 @@
       !game.running ||
       game.tutorialActive ||
       !shouldUnlockSkill() ||
-      !getPickupSkillCandidates().length;
+      !canUseCannon();
     updateModeAndRuleUi();
     updateMetaUi();
     updateMobileHud();
@@ -5384,12 +5478,7 @@
   function renderMobileAmmoDock() {
     if (!ui.mobileAmmoDock) return;
 
-    const showDock =
-      game.started &&
-      game.timeLeft > 0 &&
-      ui.guideOverlay.hidden &&
-      ui.modal.hidden &&
-      (Boolean(game.deliveryReadyAmmo) || shouldShowStashUi());
+    const showDock = false;
     ui.mobileAmmoDock.hidden = !showDock;
     if (!showDock) {
       ui.mobileDeliveryReady?.classList.remove("is-tutorial-target");
@@ -5437,7 +5526,7 @@
         "aria-label",
         ammo
           ? `${getFoodName(ammo.type, ammo.level)}${useful ? " 배송 가능" : ""} 장전`
-          : "빈 보관함",
+          : "빈 칸",
       );
     }
     if (ui.mobileStashMerge) {
@@ -5535,22 +5624,16 @@
 
   function getSkillButtonText() {
     if (game.skillCooldown > 0) {
-      return `집기 ${Math.ceil(game.skillCooldown)}초`;
+      return `자동 ${Math.ceil(game.skillCooldown)}초`;
     }
-    if (game.started && game.running && !game.tutorialActive && !getPickupSkillCandidates().length) {
-      return "회수 없음";
-    }
-    return hasDoublePickupSkill() ? "집기 x2!" : "집기!";
+    return "자동발사";
   }
 
   function getPortraitSkillButtonText() {
     if (game.skillCooldown > 0) {
       return `${Math.ceil(game.skillCooldown)}초`;
     }
-    if (game.started && game.running && !game.tutorialActive && !getPickupSkillCandidates().length) {
-      return "없음";
-    }
-    return hasDoublePickupSkill() ? "집기x2" : "집기";
+    return "자동";
   }
 
   function getShortActionHint() {
@@ -5573,18 +5656,6 @@
     }
     if (currentAmmo && isGrowthAmmoForCurrentOrder(currentAmmo.type, currentAmmo.level)) {
       return `${getFoodName(currentAmmo.type, currentAmmo.level)}끼리 맞추세요.`;
-    }
-
-    if (game.deliveryReadyAmmo) {
-      return "배송 준비를 탭하세요.";
-    }
-
-    const pickupPiece = game.pieces.find((piece) => piece.pickupReady && isAmmoUsefulForCurrentOrder(piece.type, piece.level));
-    if (pickupPiece) {
-      if (shouldAutoPickupPiece(pickupPiece)) {
-        return `${getFoodShortLabel(pickupPiece.type, pickupPiece.level)}을 탭하면 빨라요.`;
-      }
-      return "깜빡이는 재료를 탭하세요.";
     }
 
     const id = Object.keys(game.order || {}).find((key) => {
@@ -6103,8 +6174,6 @@
     }
     ctx.setLineDash([]);
 
-    drawPickupZone();
-
     ctx.strokeStyle = "#244f45";
     ctx.lineWidth = 10;
     roundRect(ARENA.left + 2, ARENA.top + 2, width - 4, height - 4, 20);
@@ -6229,7 +6298,7 @@
     ctx.font = "900 13px system-ui, sans-serif";
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
-    const label = isIntroMergeStep() ? "회수대 · 자동 보관 / 탭하면 빠름" : "회수대 · 깜빡이면 탭";
+    const label = "타겟을 맞춰 성장";
     ctx.fillText(label, CENTER.x, PICKUP_ZONE_TOP + 20);
     ctx.restore();
   }
@@ -6402,6 +6471,8 @@
   }
 
   function drawAmmoStash() {
+    if (!game.tutorialActive) return;
+
     const rects = getAmmoSlotRects();
     const deliveryRect = getDeliveryReadyRect();
     const mergeButton = getStashMergeButtonRect();
@@ -6440,7 +6511,7 @@
     ctx.font = "950 15px system-ui, sans-serif";
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
-    ctx.fillText("보관함", CENTER.x - 112, rects[0].y - 16);
+    ctx.fillText("장전칸", CENTER.x - 112, rects[0].y - 16);
 
     ctx.fillStyle = "rgba(44, 154, 160, 0.14)";
     ctx.strokeStyle = "rgba(44, 154, 160, 0.34)";
