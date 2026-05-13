@@ -1650,6 +1650,19 @@
     };
   }
 
+  function getPrimaryOrderTargetForType(type) {
+    return (
+      Object.keys(game.order || {})
+        .map((id) => ({ id, ...parseOrderKey(id) }))
+        .find((target) => {
+          return (
+            target.type === type &&
+            (game.progress?.[target.id] || 0) < (game.order?.[target.id] || 0)
+          );
+        }) || null
+    );
+  }
+
   function getOpeningAimTarget(type, level) {
     if (!isOpeningOrder()) return null;
 
@@ -1700,7 +1713,7 @@
     const type = game.cannon.loadedType || pickCannonType();
     const level = game.cannon.loadedLevel || 0;
     const fromStash = game.cannon.loadedFromStashAt > 0;
-    const openingAimTarget = getOpeningAimTarget(type, level);
+    const openingAimTarget = game.tutorialActive ? getOpeningAimTarget(type, level) : null;
     if (openingAimTarget) {
       setCannonAim(
         Math.atan2(openingAimTarget.y - CANNON.y, openingAimTarget.x - CANNON.x),
@@ -1749,7 +1762,9 @@
     game.itemMessage = feverShotCount > 1 ? `${getFoodName(type, level)} 2발!` : `${getFoodName(type, level)} 발사!`;
     game.itemMessageTimer = 0.9;
     burst(CANNON.x, CANNON.y, FOODS[type].color, feverShotCount > 1 ? 28 : 18);
-    advanceCannonLoad();
+    if (!isGrowthAmmoForCurrentOrder(type, level) && !isDeliverableAmmoForCurrentOrder(type, level)) {
+      advanceCannonLoad();
+    }
     playSound("item");
     vibrate(10);
   }
@@ -1860,6 +1875,7 @@
     game.cannon.loadedType = ammo?.type || "";
     game.cannon.loadedLevel = ammo?.level || 0;
     game.cannon.loadedFromStashAt = fromStash ? performance.now() : 0;
+    syncBoardForCurrentAmmo();
   }
 
   function setNextCannonAmmo(ammo) {
@@ -2324,22 +2340,14 @@
       clearIngredients();
     }
 
-    if (isIntroMergeStep()) {
-      spawnStarterIngredients();
-    } else if (game.pieces.length === 0) {
+    if (game.tutorialActive && isIntroMergeStep()) {
       spawnStarterIngredients();
     }
     if (game.started) {
-      if (introOrder) {
-        setCannonAmmo(createSmartAmmo());
-        setNextCannonAmmo(createSmartAmmo());
-      } else if (!game.cannon.loadedType || getRushPhase() === 0 || !orderHasType(game.order, game.cannon.loadedType)) {
-        setCannonAmmo(createSmartAmmo());
-        setNextCannonAmmo(createSmartAmmo());
-      } else {
-        setNextCannonAmmo(createSmartAmmo());
-      }
+      setCannonAmmo(createSmartAmmo());
+      setNextCannonAmmo(createSmartAmmo());
     }
+    syncBoardForCurrentAmmo();
     if (game.started && getIntroStep() === "skillUnlock" && !game.skillUnlockShown) {
       game.skillUnlockShown = true;
       game.itemMessage = "집기 해금!";
@@ -2566,6 +2574,70 @@
     Body.setAngularVelocity(piece.body, 0);
   }
 
+  function syncBoardForCurrentAmmo() {
+    if (!game.started || game.tutorialActive || !game.world || game.nextOrderDelay > 0) return;
+
+    cleanupBlockingIngredients();
+    ensureMergeTargetForCurrentAmmo();
+  }
+
+  function clearMergeTargets(includeTutorial = false) {
+    const targets = game.pieces.filter((piece) => {
+      return piece.mergeTarget || (includeTutorial && piece.tutorialTarget);
+    });
+    if (!targets.length) return;
+
+    World.remove(
+      game.world,
+      targets.map((piece) => piece.body),
+    );
+    game.pieces = game.pieces.filter((piece) => {
+      return !piece.mergeTarget && (!includeTutorial || !piece.tutorialTarget);
+    });
+  }
+
+  function cleanupBlockingIngredients() {
+    const blockers = game.pieces.filter((piece) => {
+      return !piece.scored && !piece.merging && !piece.shot && !piece.mergeTarget && !piece.tutorialTarget;
+    });
+    if (!blockers.length) return;
+
+    World.remove(
+      game.world,
+      blockers.map((piece) => piece.body),
+    );
+    game.pieces = game.pieces.filter((piece) => !blockers.includes(piece));
+  }
+
+  function ensureMergeTargetForCurrentAmmo() {
+    clearMergeTargets();
+
+    const current = getCurrentCannonAmmo();
+    if (!current) return;
+
+    const target = getPrimaryOrderTargetForType(current.type);
+    if (!target || current.level >= target.level) return;
+
+    const piece = spawnIngredient(
+      current.type,
+      0,
+      1,
+      current.level,
+      {
+        x: CENTER.x,
+        y: CENTER.y + 8,
+      },
+      {
+        x: 0,
+        y: 0,
+      },
+    );
+    piece.mergeTarget = true;
+    Body.setStatic(piece.body, true);
+    Body.setVelocity(piece.body, { x: 0, y: 0 });
+    Body.setAngularVelocity(piece.body, 0);
+  }
+
   function spawnIngredient(type, index = 0, total = 1, level = 0, position = null, velocity = null) {
     const food = getFoodLevelConfig(type, level);
     const spread = Math.min(120, 34 * total);
@@ -2602,6 +2674,7 @@
       lastPlayerHitShotId: 0,
       deliveryReadyUntil: 0,
       shot: null,
+      mergeTarget: false,
       scored: false,
       merging: false,
       bornAt: performance.now(),
@@ -2638,23 +2711,25 @@
       !b.scored &&
       !a.merging &&
       !b.merging &&
-      !a.pickupReady &&
-      !b.pickupReady &&
-      !isDeliveryReadyPiece(a) &&
-      !isDeliveryReadyPiece(b) &&
       a.type === b.type &&
       a.level === b.level &&
       a.level < MAX_FOOD_LEVEL &&
-      isPlayerDrivenMerge(a, b)
+      isGuidedGrowthMerge(a, b)
     );
+  }
+
+  function isGuidedGrowthMerge(a, b) {
+    const shot = a?.shot ? a : b?.shot ? b : null;
+    const target = a?.mergeTarget || a?.tutorialTarget ? a : b?.mergeTarget || b?.tutorialTarget ? b : null;
+    if (!shot || !target) return false;
+
+    return shot.type === target.type && shot.level === target.level;
   }
 
   function isPlayerDrivenMerge(a, b) {
     const now = performance.now();
-    const openingGuidedMerge = isIntroMergeStep() && a.type === b.type && a.level === 0;
-    if (openingGuidedMerge && (a.shot || b.shot || a.tutorialTarget || b.tutorialTarget)) {
-      return true;
-    }
+    const openingGuidedMerge = isIntroMergeStep() && isGuidedGrowthMerge(a, b);
+    if (openingGuidedMerge) return true;
 
     if (!hasFreshShotHit(a, now) && !hasFreshShotHit(b, now)) return false;
 
@@ -2847,7 +2922,7 @@
     const merged = spawnIngredient(type, 0, 1, nextLevel, position, velocity);
     merged.bump = 0.26;
     merged.hold = 0;
-    if (isAmmoUsefulForCurrentOrder(type, nextLevel)) {
+    if (isDeliverableAmmoForCurrentOrder(type, nextLevel)) {
       merged.deliveryReadyUntil = performance.now() + DELIVERY_READY_MS;
       merged.bump = 0.36;
       showFloatingText("배달 준비!", position.x, position.y - 52, "#f1c453", 28);
@@ -2875,6 +2950,15 @@
       updateUi(true);
       return;
     }
+    if (captureMergedOrderAmmo(merged, position)) {
+      burst(position.x, position.y, FOODS[type].color, 22 + nextLevel * 4);
+      setCharacterReaction(`${getFoodName(type, nextLevel)} 장전!`, "happy", 1.2);
+      playSound(game.combo >= 5 && game.combo % 5 === 0 ? "combo" : "success");
+      vibrate([8, 14, 8]);
+      checkFeverTriggers();
+      updateUi(true);
+      return;
+    }
     burst(position.x, position.y, FOODS[type].color, 22 + nextLevel * 4);
     setCharacterReaction("합체!", "happy", 1.15);
     playSound(game.combo >= 5 && game.combo % 5 === 0 ? "combo" : "success");
@@ -2893,6 +2977,35 @@
     game.itemMessage = `${getFoodName(ammo.type, ammo.level)} 완성`;
     game.itemMessageTimer = 1.4;
     completeTutorialAction("merge");
+    return true;
+  }
+
+  function captureMergedOrderAmmo(merged, position) {
+    if (!merged || game.tutorialActive) return false;
+
+    const target = getPrimaryOrderTargetForType(merged.type);
+    if (!target || merged.level > target.level) return false;
+
+    const ammo = createAmmo(merged.type, merged.level, true);
+    World.remove(game.world, merged.body);
+    game.pieces = game.pieces.filter((piece) => piece !== merged);
+    clearMergeTargets();
+
+    if (merged.level >= target.level) {
+      loadPreparedAmmo(ammo, `${getFoodName(ammo.type, ammo.level)} 완성!`);
+      showFloatingText(`${FOODS[ammo.type].name} 칸에 배달!`, CANNON.x, CANNON.y - 138, "#f1c453", 26);
+    } else {
+      loadPreparedAmmo(ammo, `${getFoodName(ammo.type, ammo.level)} 성장!`);
+      showFloatingText(
+        `${getFoodName(ammo.type, ammo.level)}끼리 맞추세요`,
+        CENTER.x,
+        CENTER.y - 54,
+        "#2c9aa0",
+        24,
+      );
+    }
+
+    burst(position.x, position.y - 10, "#f1c453", 14);
     return true;
   }
 
@@ -5102,17 +5215,22 @@
   }
 
   function isAmmoUsefulForCurrentOrder(type, level = 0) {
-    return Object.keys(game.order || {}).some((id) => {
-      const target = parseOrderKey(id);
-      return target.type === type && target.level <= level && (game.progress?.[id] || 0) < (game.order?.[id] || 0);
-    });
+    return isGrowthAmmoForCurrentOrder(type, level);
+  }
+
+  function isGrowthAmmoForCurrentOrder(type, level = 0) {
+    const target = getPrimaryOrderTargetForType(type);
+    return Boolean(target && level <= target.level);
+  }
+
+  function isDeliverableAmmoForCurrentOrder(type, level = 0) {
+    const target = getPrimaryOrderTargetForType(type);
+    return Boolean(target && level >= target.level);
   }
 
   function isExactOrderAmmo(type, level = 0) {
-    return Object.keys(game.order || {}).some((id) => {
-      const target = parseOrderKey(id);
-      return target.type === type && target.level === level && (game.progress?.[id] || 0) < (game.order?.[id] || 0);
-    });
+    const target = getPrimaryOrderTargetForType(type);
+    return Boolean(target && level === target.level);
   }
 
   function isAmmoRelatedToCurrentOrder(type) {
@@ -5125,7 +5243,7 @@
   function isDeliveryReadyPiece(piece) {
     return (
       piece?.deliveryReadyUntil > performance.now() &&
-      isAmmoUsefulForCurrentOrder(piece.type, piece.level)
+      isDeliverableAmmoForCurrentOrder(piece.type, piece.level)
     );
   }
 
@@ -5450,8 +5568,11 @@
     }
 
     const currentAmmo = getCurrentCannonAmmo();
-    if (currentAmmo && isAmmoUsefulForCurrentOrder(currentAmmo.type, currentAmmo.level)) {
+    if (currentAmmo && isDeliverableAmmoForCurrentOrder(currentAmmo.type, currentAmmo.level)) {
       return `${FOODS[currentAmmo.type].name} 칸에 넣으세요.`;
+    }
+    if (currentAmmo && isGrowthAmmoForCurrentOrder(currentAmmo.type, currentAmmo.level)) {
+      return `${getFoodName(currentAmmo.type, currentAmmo.level)}끼리 맞추세요.`;
     }
 
     if (game.deliveryReadyAmmo) {
@@ -6008,7 +6129,7 @@
     });
     const currentAmmo = getCurrentCannonAmmo();
     const isCurrentTarget =
-      currentAmmo?.type === slot.type && isAmmoUsefulForCurrentOrder(currentAmmo.type, currentAmmo.level);
+      currentAmmo?.type === slot.type && isDeliverableAmmoForCurrentOrder(currentAmmo.type, currentAmmo.level);
     const stashTargetAge =
       isCurrentTarget && game.cannon.loadedFromStashAt > 0
         ? performance.now() - game.cannon.loadedFromStashAt
